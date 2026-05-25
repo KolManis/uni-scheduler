@@ -1,0 +1,317 @@
+package solver
+
+import (
+	"log/slog"
+	"sort"
+
+	"github.com/KolManis/uni-scheduler/internal/domain/schedule"
+)
+
+type teacherState struct {
+	input            schedule.InputData
+	teacherMap       map[string]schedule.Teacher
+	groupMap         map[string]schedule.Group
+	roomMap          map[string]schedule.Room
+	assignments      []schedule.Assignment
+	subjectCount     map[string]map[schedule.ClassType]int
+	occupiedGroups   map[schedule.TimeSlot]map[string]schedule.Parity
+	occupiedTeachers map[schedule.TimeSlot]map[string]schedule.Parity
+	occupiedRooms    map[schedule.TimeSlot]map[string]schedule.Parity
+	teacherSlots     map[string][]schedule.TimeSlot
+	logger           *slog.Logger
+}
+
+func newTeacherState(input schedule.InputData) *teacherState {
+	tm := make(map[string]schedule.Teacher)
+	for _, t := range input.Teachers {
+		tm[t.ID] = t
+	}
+	gm := make(map[string]schedule.Group)
+	for _, g := range input.Groups {
+		gm[g.ID] = g
+	}
+	rm := make(map[string]schedule.Room)
+	for _, r := range input.Rooms {
+		rm[r.ID] = r
+	}
+	return &teacherState{
+		input:            input,
+		teacherMap:       tm,
+		groupMap:         gm,
+		roomMap:          rm,
+		assignments:      []schedule.Assignment{},
+		subjectCount:     make(map[string]map[schedule.ClassType]int),
+		occupiedGroups:   make(map[schedule.TimeSlot]map[string]schedule.Parity),
+		occupiedTeachers: make(map[schedule.TimeSlot]map[string]schedule.Parity),
+		occupiedRooms:    make(map[schedule.TimeSlot]map[string]schedule.Parity),
+		teacherSlots:     make(map[string][]schedule.TimeSlot),
+		logger:           slog.Default(),
+	}
+}
+
+// SolveTeacher — teacher-driven подход
+func SolveTeacher(input schedule.InputData, maxIter int) (*schedule.Schedule, error) {
+	state := newTeacherState(input)
+
+	// Сортируем преподавателей по сложности
+	teachers := orderTeachersByComplexity(state)
+
+	for _, teacher := range teachers {
+		state.logger.Info("processing teacher", "id", teacher.ID, "name", teacher.Name, "max_hours", teacher.MaxWeeklyHours)
+
+		// Получаем все предметы этого преподавателя
+		subjects := getSubjectsForTeacher(input, teacher.ID)
+
+		// Сортируем предметы
+		sortSubjectsByPriority(subjects)
+
+		// Генерируем слоты для каждого предмета с учётом чётности
+		for _, subject := range subjects {
+			if !subjectRemainingTeacher(state, subject) {
+				continue
+			}
+
+			// Обрабатываем каждый тип занятий отдельно
+			for _, classType := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
+				remaining := getRemainingHours(state, subject, classType)
+				if remaining <= 0 {
+					continue
+				}
+
+				// Для каждого часа (пары) ищем слот
+				for hoursPlaced := 0; hoursPlaced < remaining; hoursPlaced += 2 {
+					// Определяем чётность для этого конкретного занятия
+					parity := subject.Parity
+					if parity == "" {
+						parity = schedule.Always
+					}
+
+					// Ищем слот
+					slot, room, found := findBestSlot(state, subject, classType, teacher, parity)
+					if !found {
+						state.logger.Warn("cannot place subject",
+							"subject", subject.ID,
+							"type", classType,
+							"parity", parity,
+							"teacher", teacher.ID)
+						continue
+					}
+
+					assignTeacherSubject(state, subject, classType, *slot, room, parity)
+				}
+			}
+		}
+	}
+
+	// Проверяем, все ли предметы распределены
+	if !allSubjectsPlacedTeacher(state) {
+		state.logger.Warn("not all subjects placed, using fallback solver")
+		return fallbackSolve(state)
+	}
+
+	score := calculateFitness(state.assignments, state.input)
+
+	state.logger.Info("teacher-driven solve complete", "assignments", len(state.assignments), "score", score)
+
+	return &schedule.Schedule{
+		Assignments: state.assignments,
+		Score:       score,
+	}, nil
+}
+
+// findBestSlot — ищет лучший слот для занятия с учётом чётности
+func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType,
+	teacher schedule.Teacher, parity schedule.Parity) (*schedule.TimeSlot, *schedule.Room, bool) {
+
+	groupIDs := subject.GroupIDs
+	if classType != schedule.Lecture && len(groupIDs) > 1 {
+		return nil, nil, false
+	}
+
+	// Перебираем все дни и пары
+	for _, day := range schedule.AllDays {
+		for pairNum := 1; pairNum <= 6; pairNum++ {
+			slot := schedule.TimeSlot{Day: day, PairNum: pairNum}
+
+			// Проверяем доступность преподавателя
+			if !isTeacherAvailable(slot, teacher) {
+				continue
+			}
+
+			// Проверяем, свободен ли преподаватель в это время с учётом чётности
+			if !isSlotFree(slot, teacher.ID, parity, state.occupiedTeachers) {
+				continue
+			}
+
+			// Проверяем, свободны ли группы
+			if !isSlotFreeForAllGroups(slot, groupIDs, parity, state.occupiedGroups) {
+				continue
+			}
+
+			// Ищем подходящую аудиторию
+			for _, room := range state.input.Rooms {
+				if !isRoomSuitable(room, subject.RequiresRoomType) {
+					continue
+				}
+				if !isSlotFree(slot, room.ID, parity, state.occupiedRooms) {
+					continue
+				}
+				ok, _ := isRoomBigEnoughWithOverflow(room, groupIDs, state.groupMap)
+				if !ok {
+					continue
+				}
+				if !isBuildingAllowedForAllGroups(room.BuildingID, groupIDs, state.groupMap) {
+					continue
+				}
+				if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
+					continue
+				}
+				return &slot, &room, true
+			}
+		}
+	}
+	return nil, nil, false
+}
+
+// orderTeachersByComplexity — сортировка преподавателей
+func orderTeachersByComplexity(state *teacherState) []schedule.Teacher {
+	teachers := make([]schedule.Teacher, len(state.input.Teachers))
+	copy(teachers, state.input.Teachers)
+
+	subjectCount := make(map[string]int)
+	for _, sp := range state.input.SubjectPlans {
+		subjectCount[sp.TeacherID]++
+	}
+
+	sort.Slice(teachers, func(i, j int) bool {
+		if teachers[i].MaxWeeklyHours != teachers[j].MaxWeeklyHours {
+			return teachers[i].MaxWeeklyHours < teachers[j].MaxWeeklyHours
+		}
+		return subjectCount[teachers[i].ID] > subjectCount[teachers[j].ID]
+	})
+	return teachers
+}
+
+// sortSubjectsByPriority — сортировка предметов
+func sortSubjectsByPriority(subjects []schedule.SubjectPlan) {
+	sort.Slice(subjects, func(i, j int) bool {
+		lenI := len(subjects[i].GroupIDs)
+		lenJ := len(subjects[j].GroupIDs)
+		if lenI != lenJ {
+			return lenI > lenJ
+		}
+		totalI := subjects[i].LectureHours + subjects[i].PracticeHours + subjects[i].LabHours
+		totalJ := subjects[j].LectureHours + subjects[j].PracticeHours + subjects[j].LabHours
+		return totalI > totalJ
+	})
+}
+
+// assignTeacherSubject — назначение предмета
+func assignTeacherSubject(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType,
+	slot schedule.TimeSlot, room *schedule.Room, parity schedule.Parity) {
+
+	hours := 2
+
+	assignment := schedule.Assignment{
+		GroupIDs:   subject.GroupIDs,
+		TeacherID:  subject.TeacherID,
+		RoomID:     room.ID,
+		SubjectID:  subject.ID,
+		Type:       classType,
+		TimeSlot:   slot,
+		Parity:     parity,
+		BuildingID: room.BuildingID,
+	}
+
+	state.assignments = append(state.assignments, assignment)
+
+	if state.subjectCount[subject.ID] == nil {
+		state.subjectCount[subject.ID] = make(map[schedule.ClassType]int)
+	}
+	state.subjectCount[subject.ID][classType] += hours
+
+	for _, gid := range subject.GroupIDs {
+		if state.occupiedGroups[slot] == nil {
+			state.occupiedGroups[slot] = make(map[string]schedule.Parity)
+		}
+		state.occupiedGroups[slot][gid] = mergeParity(state.occupiedGroups[slot][gid], parity)
+	}
+
+	if state.occupiedTeachers[slot] == nil {
+		state.occupiedTeachers[slot] = make(map[string]schedule.Parity)
+	}
+	state.occupiedTeachers[slot][subject.TeacherID] = mergeParity(state.occupiedTeachers[slot][subject.TeacherID], parity)
+
+	if state.occupiedRooms[slot] == nil {
+		state.occupiedRooms[slot] = make(map[string]schedule.Parity)
+	}
+	state.occupiedRooms[slot][room.ID] = mergeParity(state.occupiedRooms[slot][room.ID], parity)
+
+	state.teacherSlots[subject.TeacherID] = append(state.teacherSlots[subject.TeacherID], slot)
+}
+
+// mergeParity — объединение чётностей
+func mergeParity(existing, new schedule.Parity) schedule.Parity {
+	if existing == "" {
+		return new
+	}
+	if existing == schedule.Always || new == schedule.Always {
+		return schedule.Always
+	}
+	if existing != new {
+		return schedule.Always
+	}
+	return existing
+}
+
+// getRemainingHours — оставшиеся часы
+func getRemainingHours(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType) int {
+	current := 0
+	if state.subjectCount[subject.ID] != nil {
+		current = state.subjectCount[subject.ID][classType]
+	}
+	var total int
+	switch classType {
+	case schedule.Lecture:
+		total = subject.LectureHours
+	case schedule.Practice:
+		total = subject.PracticeHours
+	case schedule.Lab:
+		total = subject.LabHours
+	}
+	return total - current
+}
+
+// subjectRemainingTeacher — проверка остатка
+func subjectRemainingTeacher(state *teacherState, subject schedule.SubjectPlan) bool {
+	for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
+		if ct != schedule.Lecture && len(subject.GroupIDs) > 1 {
+			continue
+		}
+		if getRemainingHours(state, subject, ct) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// allSubjectsPlacedTeacher — проверка всех предметов
+func allSubjectsPlacedTeacher(state *teacherState) bool {
+	for _, plan := range state.input.SubjectPlans {
+		for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
+			if ct != schedule.Lecture && len(plan.GroupIDs) > 1 {
+				continue
+			}
+			if getRemainingHours(state, plan, ct) > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// fallbackSolve — fallback на параллельный солвер
+func fallbackSolve(state *teacherState) (*schedule.Schedule, error) {
+	state.logger.Info("using fallback parallel solver")
+	return SolveParallel(state.input, 100000, 4)
+}

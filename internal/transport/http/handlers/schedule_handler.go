@@ -30,6 +30,7 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	result, err := h.usecase.Generate(r.Context(), generator.GenerateInput{
 		Name:          req.Name,
 		MaxIterations: req.MaxIterations,
+		SolverType:    req.SolverType, // ← добавляем передачу solver_type
 	})
 	if err != nil {
 		if errors.Is(err, schedule.ErrNoSolution) {

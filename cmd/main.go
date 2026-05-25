@@ -18,6 +18,7 @@ import (
 )
 
 func main() {
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -47,7 +48,9 @@ func main() {
 
 	genService := generator.NewService(inputRepo, outputRepo)
 	genHandler := handlers.NewScheduleHandler(genService)
-	router := httpTransport.NewRouter(genHandler)
+	excelHandler := handlers.NewExcelHandler(genService, inputRepo)
+
+	router := httpTransport.NewRouter(genHandler, excelHandler)
 
 	server := &http.Server{
 		Addr:              httpAddr,

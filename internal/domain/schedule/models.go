@@ -71,7 +71,6 @@ type Room struct {
 	Type       string `json:"type"`
 }
 
-// SubjectPlan — теперь может быть для нескольких групп (поток)
 type SubjectPlan struct {
 	ID               string   `json:"id"`
 	Name             string   `json:"name"`
@@ -81,12 +80,12 @@ type SubjectPlan struct {
 	LabHours         int      `json:"lab_hours"`
 	RequiresRoomType string   `json:"requires_room_type"`
 	TeacherID        string   `json:"teacher_id"`
-	GroupIDs         []string `json:"group_ids"` // ← ТЕПЕРЬ СПИСОК ГРУПП (поток!)
+	GroupIDs         []string `json:"group_ids"`
+	Parity           Parity   `json:"parity"`
 }
 
-// Assignment — одна запись в расписании
 type Assignment struct {
-	GroupIDs   []string  `json:"group_ids"` // ← список групп (для потока)
+	GroupIDs   []string  `json:"group_ids"`
 	TeacherID  string    `json:"teacher_id"`
 	RoomID     string    `json:"room_id"`
 	SubjectID  string    `json:"subject_id"`

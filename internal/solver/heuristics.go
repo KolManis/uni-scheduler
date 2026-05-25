@@ -31,6 +31,11 @@ func generateCandidates(
 		return candidates
 	}
 
+	parity := schedule.Always
+	if plan.Parity != "" && plan.Parity != schedule.Always {
+		parity = plan.Parity
+	}
+
 	if plan.ID == "MATH-L2" && state.iterations <= 1 {
 		totalStudents := 0
 		for _, gid := range groupIDs {
@@ -51,7 +56,6 @@ func generateCandidates(
 			}(),
 		)
 
-		// Считаем подходящие аудитории
 		suitableRooms := 0
 		for _, room := range state.input.Rooms {
 			if room.Type == plan.RequiresRoomType {
@@ -72,18 +76,15 @@ func generateCandidates(
 		for pairNum := 1; pairNum <= 6; pairNum++ {
 			slot := schedule.TimeSlot{Day: day, PairNum: pairNum}
 
-			if !isSlotFreeForAllGroups(slot, groupIDs, state.occupiedGroups) {
+			if !isSlotFreeForAllGroups(slot, groupIDs, parity, state.occupiedGroups) {
 				continue
 			}
 			if !isTeacherAvailable(slot, teacher) {
 				continue
 			}
-			if !isSlotFree(slot, plan.TeacherID, state.occupiedTeachers) {
+			if !isSlotFree(slot, plan.TeacherID, parity, state.occupiedTeachers) {
 				continue
 			}
-			// if !withinWeeklyLoad(plan.TeacherID, state.teacherLoad, teacher) {
-			// 	continue
-			// }
 			if !withinSubjectLimit(plan.ID, classType, state.subjectCount, plan) {
 				continue
 			}
@@ -92,7 +93,7 @@ func generateCandidates(
 				if !isRoomSuitable(room, plan.RequiresRoomType) {
 					continue
 				}
-				if !isSlotFree(slot, room.ID, state.occupiedRooms) {
+				if !isSlotFree(slot, room.ID, parity, state.occupiedRooms) {
 					continue
 				}
 
@@ -116,7 +117,6 @@ func generateCandidates(
 					score += 1000
 				}
 
-				// Поощрение за компактность: если у этой группы уже есть пары в этот день
 				sameGroupSameDay := 0
 				for _, a := range state.assignments {
 					if a.TimeSlot.Day == day {
@@ -151,7 +151,7 @@ func generateCandidates(
 						SubjectID:  plan.ID,
 						Type:       classType,
 						TimeSlot:   slot,
-						Parity:     schedule.Always,
+						Parity:     parity,
 						BuildingID: room.BuildingID,
 					},
 					score: score,
@@ -160,12 +160,10 @@ func generateCandidates(
 		}
 	}
 
-	// Сортировка по score (лучшие сначала)
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].score < candidates[j].score
 	})
 
-	// Для потоковых лекций не обрезаем кандидатов
 	maxCandidates := 30
 	if classType == schedule.Lecture && len(groupIDs) > 3 {
 		maxCandidates = 100
@@ -174,8 +172,7 @@ func generateCandidates(
 		candidates = candidates[:maxCandidates]
 	}
 
-	// Перемешиваем для разнообразия
-	rand.Shuffle(len(candidates), func(i, j int) {
+	state.rng.Shuffle(len(candidates), func(i, j int) {
 		candidates[i], candidates[j] = candidates[j], candidates[i]
 	})
 
@@ -193,7 +190,6 @@ func selectMostConstrained(state *solverState) (schedule.SubjectPlan, schedule.C
 
 	for _, plan := range state.input.SubjectPlans {
 		for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
-			// ПРОПУСКАЕМ практики и лабы с несколькими группами
 			if ct != schedule.Lecture && len(plan.GroupIDs) > 1 {
 				continue
 			}
@@ -220,12 +216,10 @@ func selectMostConstrained(state *solverState) (schedule.SubjectPlan, schedule.C
 		}
 	}
 
-	// Перемешиваем для разнообразия
-	rand.Shuffle(len(items), func(i, j int) {
+	state.rng.Shuffle(len(items), func(i, j int) {
 		items[i], items[j] = items[j], items[i]
 	})
 
-	// Сортировка: сначала потоковые, потом по remaining
 	sort.Slice(items, func(i, j int) bool {
 		if len(items[i].plan.GroupIDs) != len(items[j].plan.GroupIDs) {
 			return len(items[i].plan.GroupIDs) > len(items[j].plan.GroupIDs)

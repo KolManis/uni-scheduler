@@ -9,12 +9,14 @@ import (
 type GenerateRequest struct {
 	Name          string `json:"name"`
 	MaxIterations int    `json:"max_iterations"`
+	SolverType    string `json:"solver_type"`
 }
 
 type ScheduleResponse struct {
 	ID          int64                 `json:"id"`
 	Name        string                `json:"name"`
 	Assignments []schedule.Assignment `json:"assignments"`
+	Score       int                   `json:"score"`
 	CreatedAt   time.Time             `json:"created_at"`
 }
 
@@ -27,6 +29,7 @@ func toScheduleResponse(s *schedule.Schedule) ScheduleResponse {
 		ID:          s.ID,
 		Name:        s.Name,
 		Assignments: s.Assignments,
+		Score:       s.Score,
 		CreatedAt:   s.CreatedAt,
 	}
 }

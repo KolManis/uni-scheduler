@@ -2,9 +2,16 @@ package solver
 
 import (
 	"log/slog"
+	"math/rand"
+	"sync"
+	"time"
 
 	"github.com/KolManis/uni-scheduler/internal/domain/schedule"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 type solverState struct {
 	input            schedule.InputData
@@ -14,17 +21,18 @@ type solverState struct {
 	assignments      []schedule.Assignment
 	teacherLoad      map[string]int
 	subjectCount     map[string]map[schedule.ClassType]int
-	occupiedGroups   map[schedule.TimeSlot]map[string]bool
-	occupiedTeachers map[schedule.TimeSlot]map[string]bool
-	occupiedRooms    map[schedule.TimeSlot]map[string]bool
+	occupiedGroups   map[schedule.TimeSlot]map[string]schedule.Parity
+	occupiedTeachers map[schedule.TimeSlot]map[string]schedule.Parity
+	occupiedRooms    map[schedule.TimeSlot]map[string]schedule.Parity
 	dayLoad          map[schedule.Day]int
 	iterations       int
 	bestScore        int
 	bestSolution     []schedule.Assignment
-	logger           *slog.Logger // ДОБАВЛЯЕМ ЛОГГЕР
+	logger           *slog.Logger
+	rng              *rand.Rand
 }
 
-func newState(input schedule.InputData) *solverState {
+func newState(input schedule.InputData, rng *rand.Rand) *solverState {
 	teacherMap := make(map[string]schedule.Teacher)
 	for _, t := range input.Teachers {
 		teacherMap[t.ID] = t
@@ -48,46 +56,98 @@ func newState(input schedule.InputData) *solverState {
 		assignments:      make([]schedule.Assignment, 0),
 		teacherLoad:      make(map[string]int),
 		subjectCount:     make(map[string]map[schedule.ClassType]int),
-		occupiedGroups:   make(map[schedule.TimeSlot]map[string]bool),
-		occupiedTeachers: make(map[schedule.TimeSlot]map[string]bool),
-		occupiedRooms:    make(map[schedule.TimeSlot]map[string]bool),
+		occupiedGroups:   make(map[schedule.TimeSlot]map[string]schedule.Parity),
+		occupiedTeachers: make(map[schedule.TimeSlot]map[string]schedule.Parity),
+		occupiedRooms:    make(map[schedule.TimeSlot]map[string]schedule.Parity),
 		dayLoad:          make(map[schedule.Day]int),
 		iterations:       0,
 		bestScore:        9999999,
 		bestSolution:     nil,
-		logger:           slog.Default(), // ИСПОЛЬЗУЕМ ДЕФОЛТНЫЙ ЛОГГЕР
+		logger:           slog.Default(),
+		rng:              rng,
 	}
 }
 
-func Solve(input schedule.InputData, maxIterations int) (*schedule.Schedule, error) {
-	state := newState(input)
-	result, found := backtrack(state, 0, maxIterations)
+type SolveResult struct {
+	Schedule *schedule.Schedule
+	Score    int
+	Error    error
+}
 
-	if !found {
-		if len(state.bestSolution) > 0 {
-			score := calculateFitness(state.bestSolution, input)
-			state.logger.Info("partial solution found",
-				"assignments", len(state.bestSolution),
-				"score", score,
-				"iterations", state.iterations,
-			)
-			return &schedule.Schedule{
-				Assignments: state.bestSolution,
-				Score:       score,
-			}, nil
+func SolveParallel(input schedule.InputData, maxIterations int, numWorkers int) (*schedule.Schedule, error) {
+	if numWorkers <= 0 {
+		numWorkers = 4
+	}
+
+	results := make(chan SolveResult, numWorkers)
+	var wg sync.WaitGroup
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+
+			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
+
+			state := newState(input, rng)
+			state.logger = slog.Default().With("worker", workerID)
+
+			state.logger.Info("worker started", "max_iter", maxIterations)
+
+			result, found := backtrack(state, 0, maxIterations)
+
+			if found {
+				score := calculateFitness(result, input)
+				results <- SolveResult{
+					Schedule: &schedule.Schedule{Assignments: result, Score: score},
+					Score:    score,
+				}
+			} else if len(state.bestSolution) > 0 {
+				score := calculateFitness(state.bestSolution, input)
+				state.logger.Info("worker partial solution",
+					"assignments", len(state.bestSolution),
+					"score", score,
+				)
+				results <- SolveResult{
+					Schedule: &schedule.Schedule{Assignments: state.bestSolution, Score: score},
+					Score:    score,
+				}
+			} else {
+				state.logger.Error("worker no solution")
+				results <- SolveResult{Error: schedule.ErrNoSolution}
+			}
+		}(i)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var bestResult *SolveResult
+	for result := range results {
+		if result.Error != nil {
+			continue
 		}
-		state.logger.Error("no solution",
-			"iterations", state.iterations,
-			"assignments_placed", len(state.assignments),
-		)
+		if bestResult == nil || result.Score < bestResult.Score {
+			bestResult = &result
+		}
+	}
+
+	if bestResult == nil {
 		return nil, schedule.ErrNoSolution
 	}
 
-	score := calculateFitness(result, input)
-	return &schedule.Schedule{
-		Assignments: result,
-		Score:       score,
-	}, nil
+	slog.Info("parallel solve complete",
+		"workers", numWorkers,
+		"best_score", bestResult.Score,
+	)
+
+	return bestResult.Schedule, nil
+}
+
+func Solve(input schedule.InputData, maxIterations int) (*schedule.Schedule, error) {
+	return SolveParallel(input, maxIterations, 1)
 }
 
 func backtrack(state *solverState, depth int, maxIter int) ([]schedule.Assignment, bool) {
@@ -96,7 +156,6 @@ func backtrack(state *solverState, depth int, maxIter int) ([]schedule.Assignmen
 	}
 	state.iterations++
 
-	// ЛОГИРОВАНИЕ каждые 100000 итераций
 	if state.iterations%100000 == 0 {
 		state.logger.Info("solving progress",
 			"iter", state.iterations,
@@ -114,11 +173,7 @@ func backtrack(state *solverState, depth int, maxIter int) ([]schedule.Assignmen
 			copy(state.bestSolution, state.assignments)
 			state.logger.Info("new best solution", "score", score, "iter", state.iterations)
 		}
-		// УБИРАЕМ ранний выход при score==0
-		// if score == 0 {
-		//     return state.assignments, true
-		// }
-		return nil, false // продолжаем искать лучшее
+		return nil, false
 	}
 
 	plan, classType := selectMostConstrained(state)
@@ -128,7 +183,6 @@ func backtrack(state *solverState, depth int, maxIter int) ([]schedule.Assignmen
 
 	candidates := generateCandidates(state, plan, classType)
 
-	// ЛОГ ПРИ ОТСУТСТВИИ КАНДИДАТОВ
 	if len(candidates) == 0 {
 		state.logger.Warn("no candidates",
 			"subject", plan.ID,
@@ -155,7 +209,6 @@ func backtrack(state *solverState, depth int, maxIter int) ([]schedule.Assignmen
 	return nil, false
 }
 
-// assign, unassign — без изменений
 func assign(state *solverState, a schedule.Assignment) {
 	state.assignments = append(state.assignments, a)
 	state.teacherLoad[a.TeacherID] += 2
@@ -168,20 +221,20 @@ func assign(state *solverState, a schedule.Assignment) {
 
 	for _, gid := range a.GroupIDs {
 		if state.occupiedGroups[a.TimeSlot] == nil {
-			state.occupiedGroups[a.TimeSlot] = make(map[string]bool)
+			state.occupiedGroups[a.TimeSlot] = make(map[string]schedule.Parity)
 		}
-		state.occupiedGroups[a.TimeSlot][gid] = true
+		state.occupiedGroups[a.TimeSlot][gid] = a.Parity
 	}
 
 	if state.occupiedTeachers[a.TimeSlot] == nil {
-		state.occupiedTeachers[a.TimeSlot] = make(map[string]bool)
+		state.occupiedTeachers[a.TimeSlot] = make(map[string]schedule.Parity)
 	}
-	state.occupiedTeachers[a.TimeSlot][a.TeacherID] = true
+	state.occupiedTeachers[a.TimeSlot][a.TeacherID] = a.Parity
 
 	if state.occupiedRooms[a.TimeSlot] == nil {
-		state.occupiedRooms[a.TimeSlot] = make(map[string]bool)
+		state.occupiedRooms[a.TimeSlot] = make(map[string]schedule.Parity)
 	}
-	state.occupiedRooms[a.TimeSlot][a.RoomID] = true
+	state.occupiedRooms[a.TimeSlot][a.RoomID] = a.Parity
 }
 
 func unassign(state *solverState, a schedule.Assignment) {

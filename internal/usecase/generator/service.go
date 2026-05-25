@@ -14,6 +14,7 @@ var ErrInvalidInput = errors.New("invalid input")
 type GenerateInput struct {
 	Name          string
 	MaxIterations int
+	SolverType    string // "subject" или "teacher" (по умолчанию "teacher")
 }
 
 type Service struct {
@@ -29,11 +30,9 @@ func NewService(inputRepo InputRepository, outputRepo OutputRepository) *Service
 }
 
 func (s *Service) Generate(ctx context.Context, input GenerateInput) (*schedule.Schedule, error) {
-	input.Name = fmt.Sprintf("%s", input.Name)
 	if input.Name == "" {
 		input.Name = "Untitled"
 	}
-
 	if input.MaxIterations <= 0 {
 		input.MaxIterations = 50000
 	}
@@ -43,7 +42,18 @@ func (s *Service) Generate(ctx context.Context, input GenerateInput) (*schedule.
 		return nil, fmt.Errorf("load input: %w", err)
 	}
 
-	result, err := solver.Solve(*data, input.MaxIterations)
+	var result *schedule.Schedule
+
+	// По умолчанию используем teacher-driven подход
+	switch input.SolverType {
+	case "subject":
+		workers := 4
+		result, err = solver.SolveParallel(*data, input.MaxIterations, workers)
+	default:
+		// teacher-driven (по умолчанию)
+		result, err = solver.SolveTeacher(*data, input.MaxIterations)
+	}
+
 	if err != nil {
 		return nil, err
 	}

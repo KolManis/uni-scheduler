@@ -32,11 +32,10 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 		)
 	}
 
-	// 1. Штраф за субботу
+	// 1. Штраф за субботу (за каждую пару, а не разово)
 	for _, a := range assignments {
 		if a.TimeSlot.Day == schedule.Saturday {
 			penalty += 200
-			break
 		}
 	}
 
@@ -85,7 +84,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 				copy(sorted, slots)
 				sort.Ints(sorted)
 				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
-				penalty += gaps * 10000 // БЫЛО 100, СТАЛО 10000 — ОКНА НЕДОПУСТИМЫ
+				penalty += gaps * 10000
 			}
 		}
 	}
@@ -97,7 +96,6 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 				sorted := make([]int, len(slots))
 				copy(sorted, slots)
 				sort.Ints(sorted)
-
 				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
 				penalty += gaps * 60
 			}
@@ -151,7 +149,6 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 func allSubjectsPlaced(state *solverState) bool {
 	for _, plan := range state.input.SubjectPlans {
 		for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
-			// ПРОПУСКАЕМ практики и лабы с несколькими группами
 			if ct != schedule.Lecture && len(plan.GroupIDs) > 1 {
 				continue
 			}

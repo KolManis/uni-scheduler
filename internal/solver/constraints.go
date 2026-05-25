@@ -9,22 +9,30 @@ import (
 func isSlotFree(
 	slot schedule.TimeSlot,
 	resourceID string,
-	occupied map[schedule.TimeSlot]map[string]bool,
+	parity schedule.Parity,
+	occupied map[schedule.TimeSlot]map[string]schedule.Parity,
 ) bool {
 	if occupied[slot] == nil {
 		return true
 	}
-	return !occupied[slot][resourceID]
+	existing, exists := occupied[slot][resourceID]
+	if !exists {
+		return true
+	}
+	if existing == schedule.Always || parity == schedule.Always || existing == parity {
+		return false
+	}
+	return true
 }
 
-// isSlotFreeForAllGroups — проверяет, что ВСЕ группы потока свободны в этом слоте
 func isSlotFreeForAllGroups(
 	slot schedule.TimeSlot,
 	groupIDs []string,
-	occupied map[schedule.TimeSlot]map[string]bool,
+	parity schedule.Parity,
+	occupied map[schedule.TimeSlot]map[string]schedule.Parity,
 ) bool {
 	for _, gid := range groupIDs {
-		if !isSlotFree(slot, gid, occupied) {
+		if !isSlotFree(slot, gid, parity, occupied) {
 			return false
 		}
 	}
@@ -43,10 +51,6 @@ func isTeacherAvailable(slot schedule.TimeSlot, teacher schedule.Teacher) bool {
 func isRoomSuitable(room schedule.Room, requiredType string) bool {
 	return room.Type == requiredType
 }
-
-// func withinWeeklyLoad(teacherID string, currentLoad map[string]int, teacher schedule.Teacher) bool {
-// 	return currentLoad[teacherID]+2 <= teacher.MaxWeeklyHours
-// }
 
 func withinSubjectLimit(
 	subjectID string,
@@ -93,7 +97,6 @@ func isBuildingAllowedForTeacher(buildingID string, teacher schedule.Teacher) bo
 	return false
 }
 
-// isBuildingAllowedForAllGroups — корпус должен подходить ВСЕМ группам потока
 func isBuildingAllowedForAllGroups(
 	buildingID string,
 	groupIDs []string,
@@ -109,9 +112,6 @@ func isBuildingAllowedForAllGroups(
 	return true
 }
 
-// Проверка вместимости аудитории
-// Для потоковых лекций (>2 групп) разрешено превышение до 50%
-// Возвращает: подходит ли, и коэффициент переполнения (0.0 - 0.5)
 func isRoomBigEnoughWithOverflow(
 	room schedule.Room,
 	groupIDs []string,
@@ -124,7 +124,6 @@ func isRoomBigEnoughWithOverflow(
 		}
 	}
 
-	// Для большого потока — детальный лог
 	if len(groupIDs) >= 8 {
 		fmt.Printf("ROOM %s: cap=%d type=%s need=%d (1.5x=%d)\n",
 			room.ID, room.Capacity, room.Type, total, int(float64(room.Capacity)*1.5))

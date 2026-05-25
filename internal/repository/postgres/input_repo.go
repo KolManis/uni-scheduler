@@ -109,7 +109,7 @@ func (r *InputRepository) LoadInput(ctx context.Context) (*schedule.InputData, e
 	// Предметы
 	rows6, err := r.pool.Query(ctx, `
 		SELECT id, name, department_id, lecture_hours, practice_hours,
-			   lab_hours, requires_room_type, teacher_id, group_ids
+			   lab_hours, requires_room_type, teacher_id, group_ids, parity
 		FROM subject_plans
 	`)
 	if err != nil {
@@ -119,13 +119,18 @@ func (r *InputRepository) LoadInput(ctx context.Context) (*schedule.InputData, e
 	for rows6.Next() {
 		var sp schedule.SubjectPlan
 		var gidsJSON []byte
+		var parityStr string
 		if err := rows6.Scan(&sp.ID, &sp.Name, &sp.DepartmentID,
 			&sp.LectureHours, &sp.PracticeHours, &sp.LabHours,
-			&sp.RequiresRoomType, &sp.TeacherID, &gidsJSON); err != nil {
+			&sp.RequiresRoomType, &sp.TeacherID, &gidsJSON, &parityStr); err != nil {
 			return nil, err
 		}
 		if gidsJSON != nil {
 			json.Unmarshal(gidsJSON, &sp.GroupIDs)
+		}
+		sp.Parity = schedule.Parity(parityStr)
+		if sp.Parity == "" {
+			sp.Parity = schedule.Always
 		}
 		data.SubjectPlans = append(data.SubjectPlans, sp)
 	}

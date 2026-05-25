@@ -7,7 +7,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func NewRouter(scheduleHandler *handlers.ScheduleHandler) *mux.Router {
+func NewRouter(scheduleHandler *handlers.ScheduleHandler, excelHandler *handlers.ExcelHandler) *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Health check
@@ -23,6 +23,7 @@ func NewRouter(scheduleHandler *handlers.ScheduleHandler) *mux.Router {
 	api.HandleFunc("/schedules/generate", scheduleHandler.Generate).Methods(http.MethodPost)
 	api.HandleFunc("/schedules", scheduleHandler.List).Methods(http.MethodGet)
 	api.HandleFunc("/schedules/{id:[0-9]+}", scheduleHandler.GetByID).Methods(http.MethodGet)
+	api.HandleFunc("/schedules/{id:[0-9]+}/excel", excelHandler.Export).Methods(http.MethodGet)
 
 	return router
 }
