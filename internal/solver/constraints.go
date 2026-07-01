@@ -1,8 +1,6 @@
 package solver
 
 import (
-	"fmt"
-
 	"github.com/KolManis/uni-scheduler/internal/domain/schedule"
 )
 
@@ -49,6 +47,9 @@ func isTeacherAvailable(slot schedule.TimeSlot, teacher schedule.Teacher) bool {
 }
 
 func isRoomSuitable(room schedule.Room, requiredType string) bool {
+	if requiredType == "" {
+		return true
+	}
 	return room.Type == requiredType
 }
 
@@ -73,10 +74,13 @@ func withinSubjectLimit(
 		maxHours = plan.LabHours
 	}
 
-	return (current + 2) <= maxHours
+	return current < maxHours
 }
 
 func isBuildingAllowedForGroup(buildingID string, group schedule.Group) bool {
+	if len(group.BuildingIDs) == 0 {
+		return true
+	}
 	for _, bid := range group.BuildingIDs {
 		if bid == buildingID {
 			return true
@@ -122,11 +126,6 @@ func isRoomBigEnoughWithOverflow(
 		if g, ok := groupMap[gid]; ok {
 			total += g.StudentCount
 		}
-	}
-
-	if len(groupIDs) >= 8 {
-		fmt.Printf("ROOM %s: cap=%d type=%s need=%d (1.5x=%d)\n",
-			room.ID, room.Capacity, room.Type, total, int(float64(room.Capacity)*1.5))
 	}
 
 	if total <= room.Capacity {

@@ -6,30 +6,53 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/domain/schedule"
 )
 
+// CalculateFitness — публичная обёртка для использования из других пакетов.
+func CalculateFitness(assignments []schedule.Assignment, input schedule.InputData) int {
+	return calculateFitness(assignments, input)
+}
+
 func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) int {
 	penalty := 0
 
 	groupSlots := make(map[string]map[schedule.Day][]int)
 	teacherSlots := make(map[string]map[schedule.Day][]int)
 
+	// Дедупликация по (group, day, pairNum): чётные и нечётные пары
+	// в один и тот же слот не создают реального конфликта.
+	type slotKey struct {
+		id  string
+		day schedule.Day
+		num int
+	}
+	seenGroup := make(map[slotKey]bool)
+	seenTeacher := make(map[slotKey]bool)
+
 	for _, a := range assignments {
 		for _, gid := range a.GroupIDs {
-			if groupSlots[gid] == nil {
-				groupSlots[gid] = make(map[schedule.Day][]int)
+			k := slotKey{gid, a.TimeSlot.Day, a.TimeSlot.PairNum}
+			if !seenGroup[k] {
+				seenGroup[k] = true
+				if groupSlots[gid] == nil {
+					groupSlots[gid] = make(map[schedule.Day][]int)
+				}
+				groupSlots[gid][a.TimeSlot.Day] = append(
+					groupSlots[gid][a.TimeSlot.Day],
+					a.TimeSlot.PairNum,
+				)
 			}
-			groupSlots[gid][a.TimeSlot.Day] = append(
-				groupSlots[gid][a.TimeSlot.Day],
+		}
+
+		k := slotKey{a.TeacherID, a.TimeSlot.Day, a.TimeSlot.PairNum}
+		if !seenTeacher[k] {
+			seenTeacher[k] = true
+			if teacherSlots[a.TeacherID] == nil {
+				teacherSlots[a.TeacherID] = make(map[schedule.Day][]int)
+			}
+			teacherSlots[a.TeacherID][a.TimeSlot.Day] = append(
+				teacherSlots[a.TeacherID][a.TimeSlot.Day],
 				a.TimeSlot.PairNum,
 			)
 		}
-
-		if teacherSlots[a.TeacherID] == nil {
-			teacherSlots[a.TeacherID] = make(map[schedule.Day][]int)
-		}
-		teacherSlots[a.TeacherID][a.TimeSlot.Day] = append(
-			teacherSlots[a.TeacherID][a.TimeSlot.Day],
-			a.TimeSlot.PairNum,
-		)
 	}
 
 	// 1. Штраф за субботу (за каждую пару, а не разово)
@@ -62,17 +85,35 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 		}
 	}
 
-	// 3. Штраф за слишком мало дней
+	// 3. Штраф за слишком мало дней (группы)
 	for _, daySlots := range groupSlots {
 		totalPairs := 0
 		for _, slots := range daySlots {
 			totalPairs += len(slots)
 		}
-
 		if totalPairs >= 4 && len(daySlots) < 2 {
 			penalty += 600
 		} else if totalPairs >= 4 && len(daySlots) < 3 {
 			penalty += 200
+		}
+	}
+
+	// 3b. Штраф за неравномерное распределение у преподавателей:
+	// дни с 3+ парами очень дорогие, а пустые пятницы/четверги — значит нагрузка не размазана.
+	for _, daySlots := range teacherSlots {
+		// Штраф за переполненный день (>2 пар у одного преподавателя)
+		for _, slots := range daySlots {
+			if len(slots) > 2 {
+				penalty += (len(slots) - 2) * 350
+			}
+		}
+		// Штраф за концентрацию: если кол-во активных дней < 3 при >=4 парах в неделю
+		totalPairs := 0
+		for _, slots := range daySlots {
+			totalPairs += len(slots)
+		}
+		if totalPairs >= 4 && len(daySlots) < 3 {
+			penalty += (3 - len(daySlots)) * 400
 		}
 	}
 

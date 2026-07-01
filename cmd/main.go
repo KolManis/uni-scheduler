@@ -9,25 +9,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KolManis/uni-scheduler/internal/infrastructure/postgres"
 	repo "github.com/KolManis/uni-scheduler/internal/repository/postgres"
 	httpTransport "github.com/KolManis/uni-scheduler/internal/transport/http"
-
-	"github.com/KolManis/uni-scheduler/internal/infrastructure/postgres"
 	"github.com/KolManis/uni-scheduler/internal/transport/http/handlers"
 	"github.com/KolManis/uni-scheduler/internal/usecase/generator"
 )
 
 func main() {
-
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
 	databaseDSN := os.Getenv("DATABASE_DSN")
 	if databaseDSN == "" {
-		databaseDSN = "postgres://postgres:postgres@localhost:5432/scheduler?sslmode=disable"
+		databaseDSN = "postgres://postgres:postgres@127.0.0.1:5432/scheduler?sslmode=disable"
 	}
-
 	httpAddr := os.Getenv("HTTP_ADDR")
 	if httpAddr == "" {
 		httpAddr = ":8080"
@@ -45,12 +42,16 @@ func main() {
 
 	inputRepo := repo.NewInputRepository(pool)
 	outputRepo := repo.NewOutputRepository(pool)
+	importRepo := repo.NewImportRepository(pool)
 
-	genService := generator.NewService(inputRepo, outputRepo)
-	genHandler := handlers.NewScheduleHandler(genService)
-	excelHandler := handlers.NewExcelHandler(genService, inputRepo)
+	svc := generator.NewService(inputRepo, outputRepo, importRepo)
 
-	router := httpTransport.NewRouter(genHandler, excelHandler)
+	scheduleHandler := handlers.NewScheduleHandler(svc)
+	excelHandler := handlers.NewExcelHandler(svc, inputRepo)
+	importHandler := handlers.NewImportHandler(svc)
+	referenceHandler := handlers.NewReferenceHandler(inputRepo)
+
+	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler)
 
 	server := &http.Server{
 		Addr:              httpAddr,

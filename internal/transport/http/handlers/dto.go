@@ -1,35 +1,18 @@
 package handlers
 
-import (
-	"time"
+import "github.com/KolManis/uni-scheduler/internal/domain/schedule"
 
-	"github.com/KolManis/uni-scheduler/internal/domain/schedule"
-)
-
+// GenerateRequest — тело POST /schedules/generate.
 type GenerateRequest struct {
 	Name          string `json:"name"`
 	MaxIterations int    `json:"max_iterations"`
-	SolverType    string `json:"solver_type"`
+	SolverType    string `json:"solver_type"` // "teacher" | "subject"
+	TimeoutSec    int    `json:"timeout_sec"`
 }
 
-type ScheduleResponse struct {
-	ID          int64                 `json:"id"`
-	Name        string                `json:"name"`
-	Assignments []schedule.Assignment `json:"assignments"`
-	Score       int                   `json:"score"`
-	CreatedAt   time.Time             `json:"created_at"`
-}
-
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-func toScheduleResponse(s *schedule.Schedule) ScheduleResponse {
-	return ScheduleResponse{
-		ID:          s.ID,
-		Name:        s.Name,
-		Assignments: s.Assignments,
-		Score:       s.Score,
-		CreatedAt:   s.CreatedAt,
-	}
+// PatchAssignmentRequest — тело PATCH /schedules/{id}/assignments/{idx}.
+type PatchAssignmentRequest struct {
+	TimeSlot schedule.TimeSlot `json:"time_slot"`
+	RoomID   string            `json:"room_id"`
+	Parity   string            `json:"parity"`
 }

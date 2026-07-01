@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -13,12 +14,16 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/usecase/generator"
 )
 
+type excelScheduleService interface {
+	GetByID(ctx context.Context, id int64) (*schedule.Schedule, error)
+}
+
 type ExcelHandler struct {
-	usecase   generator.Usecase
+	usecase   excelScheduleService
 	inputRepo generator.InputRepository
 }
 
-func NewExcelHandler(usecase generator.Usecase, inputRepo generator.InputRepository) *ExcelHandler {
+func NewExcelHandler(usecase excelScheduleService, inputRepo generator.InputRepository) *ExcelHandler {
 	return &ExcelHandler{usecase: usecase, inputRepo: inputRepo}
 }
 
@@ -299,13 +304,20 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
+				// Высота строк
+				for subRow := 0; subRow < maxRowsForSlot; subRow++ {
+					f.SetRowHeight(sheet, startRow+subRow, 60)
+				}
+
 				currentRow += maxRowsForSlot
 			}
 		}
 
 		// Ширина столбцов
-		lastCol := len(teachers) + 2
-		f.SetColWidth(sheet, "A", string(rune('A'+lastCol)), 22)
+		lastColName, _ := excelize.ColumnNumberToName(len(teachers) + 2)
+		f.SetColWidth(sheet, "A", "A", 16)
+		f.SetColWidth(sheet, "B", "B", 8)
+		f.SetColWidth(sheet, "C", lastColName, 28)
 
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=teachers_schedule_%d.xlsx", scheduleID))
@@ -475,7 +487,9 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	f.SetColWidth(sheetName, "A", "C", 25)
+	f.SetColWidth(sheetName, "A", "A", 16)
+	f.SetColWidth(sheetName, "B", "B", 8)
+	f.SetColWidth(sheetName, "C", "C", 55)
 
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_schedule_%d.xlsx", sheetName, scheduleID))

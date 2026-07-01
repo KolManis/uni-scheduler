@@ -109,46 +109,73 @@ func SolveTeacher(input schedule.InputData, maxIter int) (*schedule.Schedule, er
 		return fallbackSolve(state)
 	}
 
-	score := calculateFitness(state.assignments, state.input)
+	// post-processing: local search 2-opt
+	improved := LocalSearch(state.assignments, state.input)
+	score := calculateFitness(improved, state.input)
 
-	state.logger.Info("teacher-driven solve complete", "assignments", len(state.assignments), "score", score)
+	state.logger.Info("teacher-driven solve complete",
+		"assignments", len(improved),
+		"score", score,
+	)
 
 	return &schedule.Schedule{
-		Assignments: state.assignments,
+		Assignments: improved,
 		Score:       score,
 	}, nil
 }
 
-// findBestSlot — ищет лучший слот для занятия с учётом чётности
+// findBestSlot — ищет лучший слот для занятия с day-aware выбором (без окон).
+// Порядок дней: пн→вт→ср→чт→пт, суббота только если нет альтернатив.
 func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType,
 	teacher schedule.Teacher, parity schedule.Parity) (*schedule.TimeSlot, *schedule.Room, bool) {
 
 	groupIDs := subject.GroupIDs
-	if classType != schedule.Lecture && len(groupIDs) > 1 {
-		return nil, nil, false
+
+	type candidate struct {
+		slot    schedule.TimeSlot
+		room    schedule.Room
+		penalty int // меньше = лучше
 	}
 
-	// Перебираем все дни и пары
-	for _, day := range schedule.AllDays {
+	var candidates []candidate
+
+	// Сортируем дни по текущей загрузке (меньше пар → пробуем первым)
+	// Это гарантирует равномерный разброс по неделе
+	dayLoad := make(map[schedule.Day]int)
+	for _, a := range state.assignments {
+		dayLoad[a.TimeSlot.Day]++
+	}
+	orderedDays := []schedule.Day{
+		schedule.Monday, schedule.Tuesday, schedule.Wednesday,
+		schedule.Thursday, schedule.Friday, schedule.Saturday,
+	}
+	sort.SliceStable(orderedDays, func(i, j int) bool {
+		di, dj := orderedDays[i], orderedDays[j]
+		if di == schedule.Saturday {
+			return false
+		}
+		if dj == schedule.Saturday {
+			return true
+		}
+		return dayLoad[di] < dayLoad[dj]
+	})
+
+	for _, day := range orderedDays {
 		for pairNum := 1; pairNum <= 6; pairNum++ {
 			slot := schedule.TimeSlot{Day: day, PairNum: pairNum}
 
-			// Проверяем доступность преподавателя
 			if !isTeacherAvailable(slot, teacher) {
 				continue
 			}
-
-			// Проверяем, свободен ли преподаватель в это время с учётом чётности
 			if !isSlotFree(slot, teacher.ID, parity, state.occupiedTeachers) {
 				continue
 			}
-
-			// Проверяем, свободны ли группы
 			if !isSlotFreeForAllGroups(slot, groupIDs, parity, state.occupiedGroups) {
 				continue
 			}
 
-			// Ищем подходящую аудиторию
+			pen := slotPenalty(state, slot, groupIDs, day, teacher.ID)
+
 			for _, room := range state.input.Rooms {
 				if !isRoomSuitable(room, subject.RequiresRoomType) {
 					continue
@@ -166,11 +193,137 @@ func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType s
 				if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
 					continue
 				}
-				return &slot, &room, true
+				candidates = append(candidates, candidate{slot: slot, room: room, penalty: pen})
+				break // одна аудитория на слот достаточно для сравнения
 			}
 		}
 	}
-	return nil, nil, false
+
+	if len(candidates) == 0 {
+		return nil, nil, false
+	}
+
+	// выбираем кандидата с минимальным штрафом
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.penalty < best.penalty {
+			best = c
+		}
+	}
+
+	// Теперь найдём лучшую аудиторию для выбранного слота (по вместимости)
+	bestRoom := findBestRoom(state, subject, best.slot, groupIDs, parity, teacher)
+	if bestRoom == nil {
+		return nil, nil, false
+	}
+	return &best.slot, bestRoom, true
+}
+
+// slotPenalty вычисляет штраф за постановку занятия в slot для групп groupIDs.
+func slotPenalty(state *teacherState, slot schedule.TimeSlot, groupIDs []string, day schedule.Day, teacherID string) int {
+	satPenalty := 0
+	if day == schedule.Saturday {
+		satPenalty = 5000
+	}
+
+	// Штраф за окна у групп
+	gapPenalty := 0
+	for _, gid := range groupIDs {
+		existing := groupPairsInDay(state, gid, day)
+		if len(existing) == 0 {
+			continue
+		}
+		all := append(existing, slot.PairNum)
+		gapPenalty += calcGaps(all)
+	}
+
+	// Штраф за перегрузку дня у преподавателя
+	teacherDayPairs := teacherPairsInDay(state, teacherID, day)
+	teacherSpread := len(teacherDayPairs) * 400
+
+	return satPenalty + gapPenalty*10000 + teacherSpread
+}
+
+// totalPairsInDay возвращает общее число назначений в указанный день.
+func totalPairsInDay(state *teacherState, day schedule.Day) int {
+	count := 0
+	for _, a := range state.assignments {
+		if a.TimeSlot.Day == day {
+			count++
+		}
+	}
+	return count
+}
+
+// teacherPairsInDay возвращает номера пар преподавателя в указанный день.
+func teacherPairsInDay(state *teacherState, teacherID string, day schedule.Day) []int {
+	var pairs []int
+	for _, a := range state.assignments {
+		if a.TeacherID == teacherID && a.TimeSlot.Day == day {
+			pairs = append(pairs, a.TimeSlot.PairNum)
+		}
+	}
+	return pairs
+}
+
+// groupPairsInDay возвращает номера пар группы в указанный день.
+func groupPairsInDay(state *teacherState, groupID string, day schedule.Day) []int {
+	var pairs []int
+	for _, a := range state.assignments {
+		if a.TimeSlot.Day != day {
+			continue
+		}
+		for _, gid := range a.GroupIDs {
+			if gid == groupID {
+				pairs = append(pairs, a.TimeSlot.PairNum)
+				break
+			}
+		}
+	}
+	return pairs
+}
+
+// calcGaps возвращает количество «окон» в наборе пар (пропуски между занятиями).
+func calcGaps(pairs []int) int {
+	if len(pairs) < 2 {
+		return 0
+	}
+	min, max := pairs[0], pairs[0]
+	for _, p := range pairs[1:] {
+		if p < min {
+			min = p
+		}
+		if p > max {
+			max = p
+		}
+	}
+	return (max - min + 1) - len(pairs)
+}
+
+// findBestRoom ищет подходящую аудиторию для заданного слота.
+func findBestRoom(state *teacherState, subject schedule.SubjectPlan, slot schedule.TimeSlot,
+	groupIDs []string, parity schedule.Parity, teacher schedule.Teacher) *schedule.Room {
+	for _, room := range state.input.Rooms {
+		if !isRoomSuitable(room, subject.RequiresRoomType) {
+			continue
+		}
+		if !isSlotFree(slot, room.ID, parity, state.occupiedRooms) {
+			continue
+		}
+		ok, _ := isRoomBigEnoughWithOverflow(room, groupIDs, state.groupMap)
+		if !ok {
+			continue
+		}
+		if !isBuildingAllowedForAllGroups(room.BuildingID, groupIDs, state.groupMap) {
+			continue
+		}
+		if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
+			continue
+		}
+		r := room
+		return &r
+	}
+	return nil
 }
 
 // orderTeachersByComplexity — сортировка преподавателей
@@ -282,7 +435,8 @@ func getRemainingHours(state *teacherState, subject schedule.SubjectPlan, classT
 	return total - current
 }
 
-// subjectRemainingTeacher — проверка остатка
+// subjectRemainingTeacher — проверка остатка.
+// Мультигрупповые практики/лабы не обязательны (могут не влезть в лаб. аудитории).
 func subjectRemainingTeacher(state *teacherState, subject schedule.SubjectPlan) bool {
 	for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
 		if ct != schedule.Lecture && len(subject.GroupIDs) > 1 {
@@ -295,7 +449,8 @@ func subjectRemainingTeacher(state *teacherState, subject schedule.SubjectPlan) 
 	return false
 }
 
-// allSubjectsPlacedTeacher — проверка всех предметов
+// allSubjectsPlacedTeacher — проверка всех предметов.
+// Мультигрупповые практики/лабы не требуются (best-effort).
 func allSubjectsPlacedTeacher(state *teacherState) bool {
 	for _, plan := range state.input.SubjectPlans {
 		for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
