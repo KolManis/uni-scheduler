@@ -154,15 +154,27 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		sheet := "Все преподаватели"
 		f.SetSheetName("Sheet1", sheet)
 
+		borderStyle := []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+		}
 		style, _ := f.NewStyle(&excelize.Style{
 			Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
-			Border: []excelize.Border{
-				{Type: "left", Color: "000000", Style: 1},
-				{Type: "right", Color: "000000", Style: 1},
-				{Type: "top", Color: "000000", Style: 1},
-				{Type: "bottom", Color: "000000", Style: 1},
-			},
+			Border:    borderStyle,
 		})
+		styleGreen, _ := f.NewStyle(&excelize.Style{
+			Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+			Border:    borderStyle,
+			Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"E2EFDA"}},
+		})
+		dayStyle := func(dayIdx int) int {
+			if dayIdx%2 == 0 {
+				return styleGreen
+			}
+			return style
+		}
 
 		// Заголовки
 		f.SetCellValue(sheet, "A1", "День")
@@ -173,7 +185,8 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		}
 
 		currentRow := 2
-		for _, day := range days {
+		for dayIdx, day := range days {
+			ds := dayStyle(dayIdx)
 			for pair := 1; pair <= 6; pair++ {
 				startRow := currentRow
 				timeStr := timeSlots[pair]
@@ -189,17 +202,16 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 						continue
 					}
 
-					hasEven := info.even != nil
-					hasOdd := info.odd != nil
-					hasBothDifferent := hasEven && hasOdd && info.even != info.odd
-
-					if hasBothDifferent {
+					// always-пара (одна и та же для обеих недель) → 1 строка
+					// even-only, odd-only или разные → всегда 2 строки (чётная сверху, нечётная снизу)
+					isAlways := info.even != nil && info.odd != nil && info.even == info.odd
+					if isAlways {
+						teacherRowsNeeded[t.ID] = 1
+					} else {
 						teacherRowsNeeded[t.ID] = 2
 						if maxRowsForSlot < 2 {
 							maxRowsForSlot = 2
 						}
-					} else {
-						teacherRowsNeeded[t.ID] = 1
 					}
 				}
 
@@ -222,7 +234,7 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 						info := teacherGrid[t.ID][day][pair]
 						if info == nil {
-							f.SetCellStyle(sheet, cellRef, cellRef, style)
+							f.SetCellStyle(sheet, cellRef, cellRef, ds)
 							continue
 						}
 
@@ -278,7 +290,7 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 							}
 							f.SetCellValue(sheet, cellRef, value)
 						}
-						f.SetCellStyle(sheet, cellRef, cellRef, style)
+						f.SetCellStyle(sheet, cellRef, cellRef, ds)
 					}
 				}
 
@@ -290,13 +302,12 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 				f.SetCellValue(sheet, fmt.Sprintf("A%d", startRow), dayNames[day])
 				f.SetCellValue(sheet, fmt.Sprintf("B%d", startRow), timeStr)
-				f.SetCellStyle(sheet, fmt.Sprintf("A%d", startRow), fmt.Sprintf("B%d", startRow+maxRowsForSlot-1), style)
+				f.SetCellStyle(sheet, fmt.Sprintf("A%d", startRow), fmt.Sprintf("B%d", startRow+maxRowsForSlot-1), ds)
 
-				// *** КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: объединяем ячейки для преподавателей с rowsNeeded = 1 ***
+				// Объединяем ячейки для преподавателей с rowsNeeded = 1
 				if maxRowsForSlot == 2 {
 					for colIndex, t := range teachers {
 						if teacherRowsNeeded[t.ID] == 1 {
-							// Объединяем две строки в одну ячейку для этого преподавателя
 							col, _ := excelize.CoordinatesToCellName(colIndex+3, startRow)
 							endCol, _ := excelize.CoordinatesToCellName(colIndex+3, startRow+1)
 							f.MergeCell(sheet, col, endCol)
@@ -321,6 +332,197 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=teachers_schedule_%d.xlsx", scheduleID))
+		w.WriteHeader(http.StatusOK)
+		f.Write(w)
+		return
+	}
+
+	// ========== year ==========
+	if viewType == "year" {
+		yearParam := r.URL.Query().Get("year")
+		if yearParam == "" {
+			writeError(w, http.StatusBadRequest, "year param is required")
+			return
+		}
+
+		// Собираем группы нужного года
+		var yearGroups []schedule.Group
+		for _, g := range input.Groups {
+			m := yearRe.FindStringSubmatch(g.Name)
+			if m != nil && "20"+m[1] == yearParam {
+				yearGroups = append(yearGroups, g)
+			}
+		}
+		if len(yearGroups) == 0 {
+			writeError(w, http.StatusNotFound, "no groups found for year "+yearParam)
+			return
+		}
+		sort.Slice(yearGroups, func(i, j int) bool { return yearGroups[i].Name < yearGroups[j].Name })
+
+		f := excelize.NewFile()
+		defer f.Close()
+
+		borderStyleY := []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+		}
+
+		firstSheet := true
+		for _, grp := range yearGroups {
+			sheetName := grp.ID
+			if firstSheet {
+				f.SetSheetName("Sheet1", sheetName)
+				firstSheet = false
+			} else {
+				f.NewSheet(sheetName)
+			}
+
+			styleY, _ := f.NewStyle(&excelize.Style{
+				Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+				Border:    borderStyleY,
+			})
+			styleYGreen, _ := f.NewStyle(&excelize.Style{
+				Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+				Border:    borderStyleY,
+				Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"E2EFDA"}},
+			})
+
+			type slotInfoY struct {
+				even *schedule.Assignment
+				odd  *schedule.Assignment
+			}
+			grid := make(map[schedule.Day]map[int]*slotInfoY)
+
+			for i := range sched.Assignments {
+				a := &sched.Assignments[i]
+				if !matchesWeek(*a) {
+					continue
+				}
+				found := false
+				for _, gid := range a.GroupIDs {
+					if gid == grp.ID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+				day := a.TimeSlot.Day
+				pair := a.TimeSlot.PairNum
+				if pair < 1 || pair > 6 {
+					continue
+				}
+				if grid[day] == nil {
+					grid[day] = make(map[int]*slotInfoY)
+				}
+				if grid[day][pair] == nil {
+					grid[day][pair] = &slotInfoY{}
+				}
+				info := grid[day][pair]
+				if a.Parity == schedule.Always {
+					info.even = a
+					info.odd = a
+				} else if a.Parity == schedule.Even {
+					info.even = a
+				} else if a.Parity == schedule.Odd {
+					info.odd = a
+				}
+			}
+
+			f.SetCellValue(sheetName, "A1", "День")
+			f.SetCellValue(sheetName, "B1", "Время")
+			f.SetCellValue(sheetName, "C1", "Предмет")
+
+			currentRow := 2
+			for dayIdx, day := range days {
+				ds := styleY
+				if dayIdx%2 == 0 {
+					ds = styleYGreen
+				}
+				for pair := 1; pair <= 6; pair++ {
+					startRow := currentRow
+					info := grid[day][pair]
+
+					hasEven := info != nil && info.even != nil
+					hasOdd := info != nil && info.odd != nil
+					isAlways := hasEven && hasOdd && info.even == info.odd
+
+					numRows := 1
+					if !isAlways && (hasEven || hasOdd) {
+						numRows = 2
+					}
+
+					for subRow := 0; subRow < numRows; subRow++ {
+						row := currentRow + subRow
+						var a *schedule.Assignment
+						weekLabel := ""
+
+						if numRows == 1 {
+							if isAlways {
+								a = info.even
+							} else if hasEven {
+								a = info.even
+								weekLabel = "(чётная неделя)"
+							} else if hasOdd {
+								a = info.odd
+								weekLabel = "(нечётная неделя)"
+							}
+						} else {
+							if subRow == 0 && hasEven {
+								a = info.even
+								weekLabel = "(чётная неделя)"
+							} else if subRow == 1 && hasOdd {
+								a = info.odd
+								weekLabel = "(нечётная неделя)"
+							}
+						}
+
+						if a != nil {
+							subject := subjectMap[a.SubjectID]
+							if subject == "" {
+								subject = a.SubjectID
+							}
+							room := roomMap[a.RoomID]
+							if room == "" {
+								room = a.RoomID
+							}
+							typeStr := string(a.Type)
+							switch a.Type {
+							case schedule.Lecture:
+								typeStr = "лек"
+							case schedule.Practice:
+								typeStr = "пр"
+							case schedule.Lab:
+								typeStr = "лаб"
+							}
+							teacherName := teacherMap[a.TeacherID]
+							value := fmt.Sprintf("%s (%s)\n%s\nауд.%s %s", subject, typeStr, teacherName, room, weekLabel)
+							f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), value)
+						}
+						f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("C%d", row), ds)
+					}
+
+					if numRows > 1 {
+						f.MergeCell(sheetName, fmt.Sprintf("A%d", startRow), fmt.Sprintf("A%d", startRow+numRows-1))
+						f.MergeCell(sheetName, fmt.Sprintf("B%d", startRow), fmt.Sprintf("B%d", startRow+numRows-1))
+					}
+					f.SetCellValue(sheetName, fmt.Sprintf("A%d", startRow), dayNames[day])
+					f.SetCellValue(sheetName, fmt.Sprintf("B%d", startRow), timeSlots[pair])
+
+					currentRow += numRows
+				}
+			}
+
+			f.SetColWidth(sheetName, "A", "A", 16)
+			f.SetColWidth(sheetName, "B", "B", 8)
+			f.SetColWidth(sheetName, "C", "C", 55)
+		}
+
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=schedule_%d_year%s.xlsx", scheduleID, yearParam))
 		w.WriteHeader(http.StatusOK)
 		f.Write(w)
 		return
@@ -395,22 +597,35 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 	}
 	f.SetSheetName("Sheet1", sheetName)
 
+	borderStyle2 := []excelize.Border{
+		{Type: "left", Color: "000000", Style: 1},
+		{Type: "right", Color: "000000", Style: 1},
+		{Type: "top", Color: "000000", Style: 1},
+		{Type: "bottom", Color: "000000", Style: 1},
+	}
 	style, _ := f.NewStyle(&excelize.Style{
 		Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
+		Border:    borderStyle2,
 	})
+	styleGreen, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+		Border:    borderStyle2,
+		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"E2EFDA"}},
+	})
+	dayStyleSingle := func(dayIdx int) int {
+		if dayIdx%2 == 0 {
+			return styleGreen
+		}
+		return style
+	}
 
 	f.SetCellValue(sheetName, "A1", "День")
 	f.SetCellValue(sheetName, "B1", "Время")
 	f.SetCellValue(sheetName, "C1", "Предмет")
 
 	currentRow := 2
-	for _, day := range days {
+	for dayIdx, day := range days {
+		ds := dayStyleSingle(dayIdx)
 		for pair := 1; pair <= 6; pair++ {
 			startRow := currentRow
 			timeStr := timeSlots[pair]
@@ -418,10 +633,11 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 
 			hasEven := info != nil && info.even != nil
 			hasOdd := info != nil && info.odd != nil
-			hasBothDifferent := hasEven && hasOdd && info.even != info.odd
+			isAlways := hasEven && hasOdd && info.even == info.odd
 
+			// always → 1 строка; even-only / odd-only / разные → 2 строки
 			numRows := 1
-			if hasBothDifferent {
+			if !isAlways && (hasEven || hasOdd) {
 				numRows = 2
 			}
 
@@ -472,7 +688,7 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 					value := fmt.Sprintf("%s (%s)\n%s\nауд.%s %s", subject, typeStr, teacherName, room, weekLabel)
 					f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), value)
 				}
-				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("C%d", row), style)
+				f.SetCellStyle(sheetName, fmt.Sprintf("A%d", row), fmt.Sprintf("C%d", row), ds)
 			}
 
 			if numRows > 1 {

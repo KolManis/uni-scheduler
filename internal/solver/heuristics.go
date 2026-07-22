@@ -36,42 +36,6 @@ func generateCandidates(
 		parity = plan.Parity
 	}
 
-	if plan.ID == "MATH-L2" && state.iterations <= 1 {
-		totalStudents := 0
-		for _, gid := range groupIDs {
-			if g, ok := state.groupMap[gid]; ok {
-				totalStudents += g.StudentCount
-			}
-		}
-		state.logger.Info("DEBUG MATH-L2",
-			"groups_count", len(groupIDs),
-			"total_students", totalStudents,
-			"teacher_load", state.teacherLoad[plan.TeacherID],
-			"teacher_max", teacher.MaxWeeklyHours,
-			"subject_count", func() int {
-				if state.subjectCount[plan.ID] != nil {
-					return state.subjectCount[plan.ID][classType]
-				}
-				return 0
-			}(),
-		)
-
-		suitableRooms := 0
-		for _, room := range state.input.Rooms {
-			if room.Type == plan.RequiresRoomType {
-				ok, _ := isRoomBigEnoughWithOverflow(room, groupIDs, state.groupMap)
-				if ok {
-					suitableRooms++
-				}
-			}
-		}
-		state.logger.Info("DEBUG MATH-L2 rooms",
-			"total_rooms", len(state.input.Rooms),
-			"suitable_rooms", suitableRooms,
-			"required_type", plan.RequiresRoomType,
-		)
-	}
-
 	for _, day := range schedule.AllDays {
 		for pairNum := 1; pairNum <= 6; pairNum++ {
 			slot := schedule.TimeSlot{Day: day, PairNum: pairNum}
@@ -102,10 +66,7 @@ func generateCandidates(
 					continue
 				}
 
-				if !isBuildingAllowedForAllGroups(room.BuildingID, groupIDs, state.groupMap) {
-					continue
-				}
-				if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
+				if !isRoomValidForSubject(room, plan, groupIDs, state.groupMap, teacher) {
 					continue
 				}
 

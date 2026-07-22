@@ -43,6 +43,7 @@ func main() {
 	inputRepo := repo.NewInputRepository(pool)
 	outputRepo := repo.NewOutputRepository(pool)
 	importRepo := repo.NewImportRepository(pool)
+	refWriteRepo := repo.NewRefWriteRepository(pool)
 
 	svc := generator.NewService(inputRepo, outputRepo, importRepo)
 
@@ -50,8 +51,9 @@ func main() {
 	excelHandler := handlers.NewExcelHandler(svc, inputRepo)
 	importHandler := handlers.NewImportHandler(svc)
 	referenceHandler := handlers.NewReferenceHandler(inputRepo)
+	refWriteHandler := handlers.NewRefWriteHandler(refWriteRepo)
 
-	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler)
+	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler, refWriteHandler)
 
 	server := &http.Server{
 		Addr:              httpAddr,

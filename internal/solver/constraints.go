@@ -116,6 +116,35 @@ func isBuildingAllowedForAllGroups(
 	return true
 }
 
+// isRoomValidForSubject проверяет корпусные ограничения для конкретного занятия.
+// Если у плана задан required_building_id — он имеет приоритет над building_ids групп:
+// группы физически приходят в чужой корпус ради этого предмета.
+// Если required_building_id не задан — применяется обычная проверка по группам.
+func isRoomValidForSubject(
+	room schedule.Room,
+	subject schedule.SubjectPlan,
+	groupIDs []string,
+	groupMap map[string]schedule.Group,
+	teacher schedule.Teacher,
+) bool {
+	if subject.RequiredBuildingID != "" {
+		// Жёсткое требование корпуса от самого предмета — игнорируем building_ids групп
+		if room.BuildingID != subject.RequiredBuildingID {
+			return false
+		}
+	} else {
+		// Стандартная проверка: корпус должен быть допустим для всех групп
+		if !isBuildingAllowedForAllGroups(room.BuildingID, groupIDs, groupMap) {
+			return false
+		}
+	}
+	// Преподаватель тоже должен работать в этом корпусе
+	if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
+		return false
+	}
+	return true
+}
+
 func isRoomBigEnoughWithOverflow(
 	room schedule.Room,
 	groupIDs []string,

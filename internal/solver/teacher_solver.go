@@ -174,7 +174,7 @@ func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType s
 				continue
 			}
 
-			pen := slotPenalty(state, slot, groupIDs, day, teacher.ID)
+			pen := slotPenalty(state, slot, subject, groupIDs, day, teacher.ID)
 
 			for _, room := range state.input.Rooms {
 				if !isRoomSuitable(room, subject.RequiresRoomType) {
@@ -187,10 +187,7 @@ func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType s
 				if !ok {
 					continue
 				}
-				if !isBuildingAllowedForAllGroups(room.BuildingID, groupIDs, state.groupMap) {
-					continue
-				}
-				if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
+				if !isRoomValidForSubject(room, subject, groupIDs, state.groupMap, teacher) {
 					continue
 				}
 				candidates = append(candidates, candidate{slot: slot, room: room, penalty: pen})
@@ -220,28 +217,105 @@ func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType s
 }
 
 // slotPenalty вычисляет штраф за постановку занятия в slot для групп groupIDs.
-func slotPenalty(state *teacherState, slot schedule.TimeSlot, groupIDs []string, day schedule.Day, teacherID string) int {
+func slotPenalty(state *teacherState, slot schedule.TimeSlot, subject schedule.SubjectPlan,
+	groupIDs []string, day schedule.Day, teacherID string) int {
+
 	satPenalty := 0
 	if day == schedule.Saturday {
-		satPenalty = 5000
+		satPenalty = 25000
+		for _, gid := range groupIDs {
+			satCount := 0
+			for _, a := range state.assignments {
+				if a.TimeSlot.Day != schedule.Saturday {
+					continue
+				}
+				for _, agid := range a.GroupIDs {
+					if agid == gid {
+						satCount++
+						break
+					}
+				}
+			}
+			if satCount == 0 {
+				satPenalty += 40000
+			}
+		}
 	}
 
 	// Штраф за окна у групп
 	gapPenalty := 0
+	// Штраф за перегрузку дня у конкретных групп
+	groupLoadPenalty := 0
+	// Штраф за переход в другой корпус
+	buildingPenalty := 0
+
+	// Корпус нового занятия определяется required_building_id или корпусом группы
+	newBuilding := subject.RequiredBuildingID
+
 	for _, gid := range groupIDs {
 		existing := groupPairsInDay(state, gid, day)
-		if len(existing) == 0 {
-			continue
+		n := len(existing)
+		if n > 0 {
+			all := append(existing, slot.PairNum)
+			gapPenalty += calcGaps(all)
 		}
-		all := append(existing, slot.PairNum)
-		gapPenalty += calcGaps(all)
+		switch {
+		case n >= 4:
+			groupLoadPenalty += 50000
+		case n == 3:
+			groupLoadPenalty += 15000
+		case n == 2:
+			groupLoadPenalty += 4000
+		case n == 1:
+			groupLoadPenalty += 800
+		}
+
+		// Штраф за переход между корпусами
+		if newBuilding != "" {
+			buildingPenalty += calcBuildingTransitionPenalty(state, gid, day, slot.PairNum, newBuilding)
+		}
 	}
 
 	// Штраф за перегрузку дня у преподавателя
 	teacherDayPairs := teacherPairsInDay(state, teacherID, day)
 	teacherSpread := len(teacherDayPairs) * 400
 
-	return satPenalty + gapPenalty*10000 + teacherSpread
+	// Глобальный штраф за перегруженный день
+	globalSpread := totalPairsInDay(state, day) * 20
+
+	return satPenalty + gapPenalty*10000 + groupLoadPenalty + teacherSpread + globalSpread + buildingPenalty
+}
+
+// calcBuildingTransitionPenalty начисляет штраф если новое занятие (pairNum, building)
+// стоит вплотную или через одно окно к уже поставленным парам группы в другом корпусе.
+func calcBuildingTransitionPenalty(state *teacherState, gid string, day schedule.Day, pairNum int, newBuilding string) int {
+	penalty := 0
+	for _, a := range state.assignments {
+		if a.TimeSlot.Day != day {
+			continue
+		}
+		found := false
+		for _, agid := range a.GroupIDs {
+			if agid == gid {
+				found = true
+				break
+			}
+		}
+		if !found || a.BuildingID == newBuilding {
+			continue
+		}
+		diff := pairNum - a.TimeSlot.PairNum
+		if diff < 0 {
+			diff = -diff
+		}
+		switch diff {
+		case 1: // вплотную — критично
+			penalty += 2000
+		case 2: // через одно окно — менее критично
+			penalty += 700
+		}
+	}
+	return penalty
 }
 
 // totalPairsInDay возвращает общее число назначений в указанный день.
@@ -301,8 +375,18 @@ func calcGaps(pairs []int) int {
 }
 
 // findBestRoom ищет подходящую аудиторию для заданного слота.
+// Выбирает аудиторию с минимальным превышением вместимости.
 func findBestRoom(state *teacherState, subject schedule.SubjectPlan, slot schedule.TimeSlot,
 	groupIDs []string, parity schedule.Parity, teacher schedule.Teacher) *schedule.Room {
+	totalStudents := 0
+	for _, gid := range groupIDs {
+		if g, ok := state.groupMap[gid]; ok {
+			totalStudents += g.StudentCount
+		}
+	}
+
+	var best *schedule.Room
+	bestDelta := -1
 	for _, room := range state.input.Rooms {
 		if !isRoomSuitable(room, subject.RequiresRoomType) {
 			continue
@@ -314,16 +398,20 @@ func findBestRoom(state *teacherState, subject schedule.SubjectPlan, slot schedu
 		if !ok {
 			continue
 		}
-		if !isBuildingAllowedForAllGroups(room.BuildingID, groupIDs, state.groupMap) {
+		if !isRoomValidForSubject(room, subject, groupIDs, state.groupMap, teacher) {
 			continue
 		}
-		if !isBuildingAllowedForTeacher(room.BuildingID, teacher) {
-			continue
+		delta := room.Capacity - totalStudents
+		if delta < 0 {
+			delta = -delta * 3 // переполнение штрафуем сильнее, чем пустое место
 		}
-		r := room
-		return &r
+		if best == nil || delta < bestDelta {
+			r := room
+			best = &r
+			bestDelta = delta
+		}
 	}
-	return nil
+	return best
 }
 
 // orderTeachersByComplexity — сортировка преподавателей

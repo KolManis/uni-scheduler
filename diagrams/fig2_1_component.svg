@@ -1,0 +1,83 @@
+<svg viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" font-family="Times New Roman, serif" font-size="13">
+  <!-- Title -->
+  <text x="400" y="22" text-anchor="middle" font-size="14" font-weight="bold">Компонентная диаграмма системы</text>
+
+  <!-- Transport layer -->
+  <rect x="30" y="45" width="740" height="100" fill="none" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="40" y="62" font-size="12" font-style="italic">«layer» Транспортный (transport/http)</text>
+  <rect x="50" y="70" width="130" height="55" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="115" y="88" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="115" y="103" text-anchor="middle">ScheduleHandler</text>
+  <rect x="210" y="70" width="130" height="55" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="275" y="88" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="275" y="103" text-anchor="middle">ExcelHandler</text>
+  <rect x="370" y="70" width="130" height="55" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="435" y="88" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="435" y="103" text-anchor="middle">ReferenceHandler</text>
+  <rect x="530" y="70" width="130" height="55" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="595" y="88" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="595" y="103" text-anchor="middle">ImportHandler</text>
+  <text x="685" y="88" text-anchor="middle" font-size="11">router.go</text>
+  <rect x="660" y="95" width="95" height="30" fill="#eee" stroke="#000" stroke-width="1"/>
+  <text x="707" y="115" text-anchor="middle" font-size="10">gorilla/mux</text>
+
+  <!-- UseCase layer -->
+  <rect x="30" y="165" width="740" height="75" fill="none" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="40" y="182" font-size="12" font-style="italic">«layer» Сценарии использования (usecase/generator)</text>
+  <rect x="270" y="190" width="260" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="400" y="207" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="400" y="222" text-anchor="middle">GeneratorService</text>
+
+  <!-- Solver -->
+  <rect x="30" y="260" width="740" height="75" fill="none" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="40" y="277" font-size="12" font-style="italic">«module» Алгоритм (solver)</text>
+  <rect x="160" y="285" width="150" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="235" y="302" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="235" y="317" text-anchor="middle">TeacherSolver</text>
+  <rect x="340" y="285" width="130" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="405" y="302" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="405" y="317" text-anchor="middle">LocalSearch</text>
+  <rect x="500" y="285" width="130" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="565" y="302" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="565" y="317" text-anchor="middle">Fitness</text>
+
+  <!-- Repository layer -->
+  <rect x="30" y="355" width="740" height="75" fill="none" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="40" y="372" font-size="12" font-style="italic">«layer» Инфраструктура (repository/postgres)</text>
+  <rect x="100" y="380" width="150" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="175" y="397" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="175" y="412" text-anchor="middle">InputRepository</text>
+  <rect x="310" y="380" width="160" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="390" y="397" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="390" y="412" text-anchor="middle">OutputRepository</text>
+  <rect x="530" y="380" width="160" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="610" y="397" text-anchor="middle" font-size="11" font-weight="bold">«component»</text>
+  <text x="610" y="412" text-anchor="middle">ImportRepository</text>
+
+  <!-- Domain layer -->
+  <rect x="30" y="450" width="740" height="55" fill="none" stroke="#000" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="40" y="467" font-size="12" font-style="italic">«layer» Домен (domain/schedule)</text>
+  <rect x="270" y="472" width="260" height="28" fill="#f5f5f5" stroke="#000" stroke-width="1.5"/>
+  <text x="400" y="491" text-anchor="middle">Schedule, Assignment, Teacher, Group, Room, SubjectPlan</text>
+
+  <!-- Arrows: transport → usecase -->
+  <line x1="115" y1="125" x2="340" y2="190" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="275" y1="125" x2="370" y2="190" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="435" y1="125" x2="420" y2="190" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="595" y1="125" x2="460" y2="190" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <!-- usecase → solver -->
+  <line x1="350" y1="230" x2="280" y2="285" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <!-- usecase → repo -->
+  <line x1="400" y1="230" x2="390" y2="380" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <!-- repo → domain -->
+  <line x1="175" y1="420" x2="310" y2="472" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="390" y1="420" x2="400" y2="472" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <!-- solver → domain -->
+  <line x1="235" y1="325" x2="330" y2="472" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#000"/>
+    </marker>
+  </defs>
+</svg>

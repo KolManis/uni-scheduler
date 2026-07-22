@@ -4,9 +4,15 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/domain/schedule"
 )
 
-// LocalSearch улучшает расписание методом 2-opt swap.
-// Переставляет слоты двух назначений до тех пор, пока score уменьшается.
+// LocalSearch улучшает расписание: сначала 2-opt swap, затем or-opt перемещение.
 func LocalSearch(assignments []schedule.Assignment, input schedule.InputData) []schedule.Assignment {
+	current := twoOpt(assignments, input)
+	current = orOpt(current, input)
+	return current
+}
+
+// twoOpt — попарный обмен слотами, устраняет окна.
+func twoOpt(assignments []schedule.Assignment, input schedule.InputData) []schedule.Assignment {
 	current := make([]schedule.Assignment, len(assignments))
 	copy(current, assignments)
 	currentScore := calculateFitness(current, input)
@@ -19,17 +25,10 @@ func LocalSearch(assignments []schedule.Assignment, input schedule.InputData) []
 				if current[i].TimeSlot == current[j].TimeSlot {
 					continue
 				}
-
-				// пробуем переставить слоты (и корпуса)
 				swapped := swapSlots(current, i, j)
-				if swapped == nil {
+				if swapped == nil || !checkHardConstraints(swapped) {
 					continue
 				}
-
-				if !checkHardConstraints(swapped) {
-					continue
-				}
-
 				newScore := calculateFitness(swapped, input)
 				if newScore < currentScore {
 					current = swapped
@@ -42,14 +41,55 @@ func LocalSearch(assignments []schedule.Assignment, input schedule.InputData) []
 	return current
 }
 
-// swapSlots возвращает копию assignments с переставленными TimeSlot и BuildingID для i и j.
+// orOpt — перемещает одно назначение в другой день/слот.
+// Целенаправленно убирает перегрузку конкретных дней у групп.
+func orOpt(assignments []schedule.Assignment, input schedule.InputData) []schedule.Assignment {
+	current := make([]schedule.Assignment, len(assignments))
+	copy(current, assignments)
+	currentScore := calculateFitness(current, input)
+
+	weekdays := []schedule.Day{
+		schedule.Monday, schedule.Tuesday, schedule.Wednesday,
+		schedule.Thursday, schedule.Friday,
+	}
+
+	improved := true
+	for improved {
+		improved = false
+		for i := 0; i < len(current); i++ {
+			origSlot := current[i].TimeSlot
+			for _, day := range weekdays {
+				if day == origSlot.Day {
+					continue
+				}
+				for pairNum := 1; pairNum <= 6; pairNum++ {
+					candidate := make([]schedule.Assignment, len(current))
+					copy(candidate, current)
+					candidate[i].TimeSlot = schedule.TimeSlot{Day: day, PairNum: pairNum}
+
+					if !checkHardConstraints(candidate) {
+						continue
+					}
+					newScore := calculateFitness(candidate, input)
+					if newScore < currentScore {
+						current = candidate
+						currentScore = newScore
+						improved = true
+					}
+				}
+			}
+		}
+	}
+	return current
+}
+
+// swapSlots возвращает копию assignments с переставленными TimeSlot для i и j.
+// BuildingID не меняется: корпус определяется аудиторией, а не временным слотом.
 func swapSlots(assignments []schedule.Assignment, i, j int) []schedule.Assignment {
 	result := make([]schedule.Assignment, len(assignments))
 	copy(result, assignments)
 	result[i].TimeSlot = assignments[j].TimeSlot
-	result[i].BuildingID = assignments[j].BuildingID
 	result[j].TimeSlot = assignments[i].TimeSlot
-	result[j].BuildingID = assignments[i].BuildingID
 	return result
 }
 

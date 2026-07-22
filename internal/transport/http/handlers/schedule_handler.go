@@ -46,6 +46,7 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		MaxIterations: req.MaxIterations,
 		SolverType:    req.SolverType,
 		TimeoutSec:    req.TimeoutSec,
+		SemesterHalf:  req.SemesterHalf,
 	})
 	if err != nil {
 		if errors.Is(err, schedule.ErrNoSolution) {

@@ -1,0 +1,102 @@
+<svg viewBox="0 0 820 560" xmlns="http://www.w3.org/2000/svg" font-family="Times New Roman, serif" font-size="12">
+  <text x="410" y="20" text-anchor="middle" font-size="14" font-weight="bold">Диаграмма последовательности: генерация расписания</text>
+
+  <!-- Lifeline boxes -->
+  <rect x="20" y="35" width="100" height="36" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="70" y="49" text-anchor="middle" font-size="11" font-weight="bold">Клиент</text>
+  <text x="70" y="63" text-anchor="middle" font-size="10">(HTTP)</text>
+
+  <rect x="160" y="35" width="120" height="36" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="220" y="49" text-anchor="middle" font-size="11" font-weight="bold">Schedule</text>
+  <text x="220" y="63" text-anchor="middle" font-size="10">Handler</text>
+
+  <rect x="330" y="35" width="120" height="36" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="390" y="49" text-anchor="middle" font-size="11" font-weight="bold">Generator</text>
+  <text x="390" y="63" text-anchor="middle" font-size="10">Service</text>
+
+  <rect x="500" y="35" width="120" height="36" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="560" y="49" text-anchor="middle" font-size="11" font-weight="bold">Input</text>
+  <text x="560" y="63" text-anchor="middle" font-size="10">Repository</text>
+
+  <rect x="665" y="35" width="120" height="36" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="725" y="49" text-anchor="middle" font-size="11" font-weight="bold">Teacher</text>
+  <text x="725" y="63" text-anchor="middle" font-size="10">Solver</text>
+
+  <!-- Lifelines -->
+  <line x1="70"  y1="71" x2="70"  y2="540" stroke="#000" stroke-width="1" stroke-dasharray="5,3"/>
+  <line x1="220" y1="71" x2="220" y2="540" stroke="#000" stroke-width="1" stroke-dasharray="5,3"/>
+  <line x1="390" y1="71" x2="390" y2="540" stroke="#000" stroke-width="1" stroke-dasharray="5,3"/>
+  <line x1="560" y1="71" x2="560" y2="540" stroke="#000" stroke-width="1" stroke-dasharray="5,3"/>
+  <line x1="725" y1="71" x2="725" y2="540" stroke="#000" stroke-width="1" stroke-dasharray="5,3"/>
+
+  <!-- Activation boxes -->
+  <rect x="65"  y="100" width="10" height="395" fill="#ddd" stroke="#000" stroke-width="1"/>
+  <rect x="215" y="115" width="10" height="365" fill="#ddd" stroke="#000" stroke-width="1"/>
+  <rect x="385" y="135" width="10" height="315" fill="#ddd" stroke="#000" stroke-width="1"/>
+  <rect x="555" y="155" width="10" height="60"  fill="#ddd" stroke="#000" stroke-width="1"/>
+  <rect x="720" y="235" width="10" height="150" fill="#ddd" stroke="#000" stroke-width="1"/>
+
+  <!-- Messages -->
+  <!-- 1 -->
+  <line x1="75" y1="110" x2="215" y2="120" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="140" y="108" text-anchor="middle" font-size="11">1: POST /schedules/generate</text>
+
+  <!-- 2 -->
+  <line x1="225" y1="140" x2="385" y2="148" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="305" y="138" text-anchor="middle" font-size="11">2: Generate(req)</text>
+
+  <!-- 3 -->
+  <line x1="395" y1="160" x2="555" y2="168" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="475" y="158" text-anchor="middle" font-size="11">3: LoadInput(ctx)</text>
+
+  <!-- 3 return -->
+  <line x1="555" y1="210" x2="395" y2="202" stroke="#000" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#arrd)"/>
+  <text x="475" y="198" text-anchor="middle" font-size="11">InputData</text>
+
+  <!-- 4: goroutine start -->
+  <rect x="350" y="220" width="80" height="18" fill="#f0f0f0" stroke="#000" stroke-width="1"/>
+  <text x="390" y="233" text-anchor="middle" font-size="10">go + WithTimeout</text>
+
+  <!-- 5 -->
+  <line x1="395" y1="245" x2="720" y2="245" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="555" y="240" text-anchor="middle" font-size="11">4: SolveTeacher(InputData)</text>
+
+  <!-- solver internal: construct -->
+  <text x="725" y="270" text-anchor="middle" font-size="10" font-style="italic">Конструктивная</text>
+  <text x="725" y="283" text-anchor="middle" font-size="10" font-style="italic">фаза (teacher-driven)</text>
+  <text x="725" y="296" text-anchor="middle" font-size="10" font-style="italic">+ локальный поиск</text>
+  <text x="725" y="309" text-anchor="middle" font-size="10" font-style="italic">(2-opt, or-opt)</text>
+
+  <!-- 5 return -->
+  <line x1="720" y1="385" x2="395" y2="375" stroke="#000" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#arrd)"/>
+  <text x="555" y="370" text-anchor="middle" font-size="11">Schedule (assignments[])</text>
+
+  <!-- 6: Save -->
+  <rect x="580" y="35" width="120" height="36" fill="#fff" stroke="#000" stroke-width="1.5" x="580"/>
+  <!-- reuse output repo lifeline -->
+  <rect x="500" y="35" width="120" height="36" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="560" y="49" text-anchor="middle" font-size="11" font-weight="bold">Output</text>
+  <text x="560" y="63" text-anchor="middle" font-size="10">Repository</text>
+  <rect x="555" y="390" width="10" height="50" fill="#ddd" stroke="#000" stroke-width="1"/>
+  <line x1="395" y1="400" x2="555" y2="400" stroke="#000" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="475" y="396" text-anchor="middle" font-size="11">5: SaveSchedule(schedule)</text>
+  <line x1="555" y1="435" x2="395" y2="425" stroke="#000" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#arrd)"/>
+  <text x="475" y="422" text-anchor="middle" font-size="11">id (int)</text>
+
+  <!-- 7: return to handler -->
+  <line x1="385" y1="455" x2="225" y2="445" stroke="#000" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#arrd)"/>
+  <text x="305" y="442" text-anchor="middle" font-size="11">schedule + id</text>
+
+  <!-- 8: HTTP response -->
+  <line x1="215" y1="475" x2="75" y2="465" stroke="#000" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#arrd)"/>
+  <text x="140" y="462" text-anchor="middle" font-size="11">6: 201 Created + JSON</text>
+
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#000"/>
+    </marker>
+    <marker id="arrd" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#000"/>
+    </marker>
+  </defs>
+</svg>

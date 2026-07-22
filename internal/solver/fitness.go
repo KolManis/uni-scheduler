@@ -55,10 +55,32 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 		}
 	}
 
-	// 1. Штраф за субботу (за каждую пару, а не разово)
+	// 1. Штраф за субботу + одиночная суббота у группы
+	satGroupCount := make(map[string]int)
 	for _, a := range assignments {
 		if a.TimeSlot.Day == schedule.Saturday {
 			penalty += 200
+			for _, gid := range a.GroupIDs {
+				satGroupCount[gid]++
+			}
+		}
+	}
+	for _, cnt := range satGroupCount {
+		if cnt == 1 {
+			penalty += 8000 // одна пара в субботу — нежелательно
+		}
+	}
+
+	// 1b. Штраф за перегрузку дня у группы (видимый для or-opt)
+	for _, daySlots := range groupSlots {
+		for _, slots := range daySlots {
+			n := len(slots)
+			switch {
+			case n >= 5:
+				penalty += (n-4)*4000 + 2000
+			case n == 4:
+				penalty += 800
+			}
 		}
 	}
 
@@ -143,33 +165,43 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 		}
 	}
 
-	// 6. Штраф за переходы между корпусами
+	// 6. Штраф за переходы между корпусами.
+	// Строим map (gid, day, pairNum) → buildingID за один проход вместо O(n³).
+	type gSlotKey struct {
+		gid string
+		day schedule.Day
+		num int
+	}
+	groupBuilding := make(map[gSlotKey]string, len(assignments)*2)
+	for _, a := range assignments {
+		for _, gid := range a.GroupIDs {
+			k := gSlotKey{gid, a.TimeSlot.Day, a.TimeSlot.PairNum}
+			if groupBuilding[k] == "" {
+				groupBuilding[k] = a.BuildingID
+			}
+		}
+	}
 	for gid, daySlots := range groupSlots {
 		for day, slots := range daySlots {
-			if len(slots) >= 2 {
-				sorted := make([]int, len(slots))
-				copy(sorted, slots)
-				sort.Ints(sorted)
+			if len(slots) < 2 {
+				continue
+			}
+			sorted := make([]int, len(slots))
+			copy(sorted, slots)
+			sort.Ints(sorted)
 
-				for i := 0; i < len(sorted)-1; i++ {
-					if sorted[i+1]-sorted[i] == 1 {
-						var b1, b2 string
-						for _, a := range assignments {
-							for _, agid := range a.GroupIDs {
-								if agid == gid && a.TimeSlot.Day == day {
-									if a.TimeSlot.PairNum == sorted[i] {
-										b1 = a.BuildingID
-									}
-									if a.TimeSlot.PairNum == sorted[i+1] {
-										b2 = a.BuildingID
-									}
-								}
-							}
-						}
-						if b1 != "" && b2 != "" && b1 != b2 {
-							penalty += 150
-						}
-					}
+			for i := 0; i < len(sorted)-1; i++ {
+				b1 := groupBuilding[gSlotKey{gid, day, sorted[i]}]
+				b2 := groupBuilding[gSlotKey{gid, day, sorted[i+1]}]
+				if b1 == "" || b2 == "" || b1 == b2 {
+					continue
+				}
+				diff := sorted[i+1] - sorted[i]
+				switch diff {
+				case 1: // вплотную — критичный переход
+					penalty += 2000
+				case 2: // через одно окно — есть время добраться
+					penalty += 700
 				}
 			}
 		}

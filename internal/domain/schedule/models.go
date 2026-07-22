@@ -71,17 +71,31 @@ type Room struct {
 	Type       string `json:"type"`
 }
 
+// SemesterHalf указывает в какой половине семестра идёт дисциплина.
+// "full"   — весь семестр (практики, лабы, постоянные лекции)
+// "first"  — только 1-я половина (1–8 нед.), например вводные лекционные курсы
+// "second" — только 2-я половина (9–16 нед.), например курсовые, защиты
+type SemesterHalf string
+
+const (
+	HalfFull   SemesterHalf = "full"
+	HalfFirst  SemesterHalf = "first"
+	HalfSecond SemesterHalf = "second"
+)
+
 type SubjectPlan struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	DepartmentID     string   `json:"department_id"`
-	LectureHours     int      `json:"lecture_hours"`
-	PracticeHours    int      `json:"practice_hours"`
-	LabHours         int      `json:"lab_hours"`
-	RequiresRoomType string   `json:"requires_room_type"`
-	TeacherID        string   `json:"teacher_id"`
-	GroupIDs         []string `json:"group_ids"`
-	Parity           Parity   `json:"parity"`
+	ID                 string       `json:"id"`
+	Name               string       `json:"name"`
+	DepartmentID       string       `json:"department_id"`
+	LectureHours       int          `json:"lecture_hours"`
+	PracticeHours      int          `json:"practice_hours"`
+	LabHours           int          `json:"lab_hours"`
+	RequiresRoomType   string       `json:"requires_room_type"`
+	RequiredBuildingID string       `json:"required_building_id"` // если задан, занятие только в этом корпусе
+	TeacherID          string       `json:"teacher_id"`
+	GroupIDs           []string     `json:"group_ids"`
+	Parity             Parity       `json:"parity"`
+	SemesterHalf       SemesterHalf `json:"semester_half"`
 }
 
 type Assignment struct {

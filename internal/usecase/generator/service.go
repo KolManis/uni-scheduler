@@ -18,8 +18,12 @@ var ErrInvalidInput = errors.New("invalid input")
 type GenerateInput struct {
 	Name          string
 	MaxIterations int
-	SolverType    string // "subject" | "teacher" (default)
-	TimeoutSec    int    // 0 → используется дефолт 30 сек
+	SolverType    string                 // "subject" | "teacher" (default)
+	TimeoutSec    int                    // 0 → используется дефолт 30 сек
+	SemesterHalf  schedule.SemesterHalf  // "" | "full" | "first" | "second"
+	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
+	// "second" → исключить планы с semester_half="first" (2-я половина, лекции закончились)
+	// "" / "full" → всё без фильтрации (по умолчанию)
 }
 
 // PatchRequest — запрос на изменение одного назначения.
@@ -70,6 +74,18 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*schedule.Sch
 	data, err := s.inputRepo.LoadInput(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load input: %w", err)
+	}
+
+	// Фильтрация планов по половине семестра
+	if in.SemesterHalf == schedule.HalfSecond {
+		// 2-я половина: убираем планы, которые идут только в 1-й половине
+		filtered := data.SubjectPlans[:0]
+		for _, sp := range data.SubjectPlans {
+			if sp.SemesterHalf != schedule.HalfFirst {
+				filtered = append(filtered, sp)
+			}
+		}
+		data.SubjectPlans = filtered
 	}
 
 	solveCtx, cancel := context.WithTimeout(ctx, time.Duration(in.TimeoutSec)*time.Second)

@@ -1,0 +1,12 @@
+# Compiled binary
+main.exe
+*.exe
+
+# Temp Excel lock files
+~$*
+
+# Junk paths from Git Bash on Windows (e.g. C\357\200\272Temp...)
+C\3*
+
+# Go build cache (if any)
+vendor/

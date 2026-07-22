@@ -1,0 +1,76 @@
+<svg viewBox="0 0 760 540" xmlns="http://www.w3.org/2000/svg" font-family="Times New Roman, serif" font-size="13">
+  <text x="380" y="22" text-anchor="middle" font-size="14" font-weight="bold">Диаграмма вариантов использования</text>
+
+  <!-- System boundary -->
+  <rect x="170" y="35" width="470" height="490" fill="none" stroke="#000" stroke-width="1.5"/>
+  <text x="405" y="55" text-anchor="middle" font-size="12" font-style="italic">Система составления расписания</text>
+
+  <!-- Actor 1: Admin -->
+  <ellipse cx="65" cy="200" rx="18" ry="18" fill="none" stroke="#000" stroke-width="1.5"/>
+  <line x1="65" y1="218" x2="65" y2="268" stroke="#000" stroke-width="1.5"/>
+  <line x1="65" y1="235" x2="40" y2="255" stroke="#000" stroke-width="1.5"/>
+  <line x1="65" y1="235" x2="90" y2="255" stroke="#000" stroke-width="1.5"/>
+  <line x1="65" y1="268" x2="45" y2="295" stroke="#000" stroke-width="1.5"/>
+  <line x1="65" y1="268" x2="85" y2="295" stroke="#000" stroke-width="1.5"/>
+  <text x="65" y="315" text-anchor="middle" font-size="12">Администратор</text>
+  <text x="65" y="330" text-anchor="middle" font-size="12">расписания</text>
+
+  <!-- Actor 2: SysAdmin -->
+  <ellipse cx="695" cy="380" rx="18" ry="18" fill="none" stroke="#000" stroke-width="1.5"/>
+  <line x1="695" y1="398" x2="695" y2="448" stroke="#000" stroke-width="1.5"/>
+  <line x1="695" y1="415" x2="670" y2="435" stroke="#000" stroke-width="1.5"/>
+  <line x1="695" y1="415" x2="720" y2="435" stroke="#000" stroke-width="1.5"/>
+  <line x1="695" y1="448" x2="675" y2="475" stroke="#000" stroke-width="1.5"/>
+  <line x1="695" y1="448" x2="715" y2="475" stroke="#000" stroke-width="1.5"/>
+  <text x="695" y="494" text-anchor="middle" font-size="12">Системный</text>
+  <text x="695" y="509" text-anchor="middle" font-size="12">администратор</text>
+
+  <!-- Use cases (ellipses) -->
+  <!-- Admin use cases -->
+  <ellipse cx="380" cy="85" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="90" text-anchor="middle" font-size="12">Просмотр справочных данных</text>
+
+  <ellipse cx="380" cy="145" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="150" text-anchor="middle" font-size="12">Генерация расписания</text>
+
+  <ellipse cx="380" cy="205" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="210" text-anchor="middle" font-size="12">Просмотр расписания</text>
+
+  <ellipse cx="380" cy="265" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="270" text-anchor="middle" font-size="12">Корректировка назначения</text>
+
+  <ellipse cx="380" cy="325" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="330" text-anchor="middle" font-size="12">Экспорт расписания в Excel</text>
+
+  <ellipse cx="380" cy="385" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="390" text-anchor="middle" font-size="12">Удаление расписания</text>
+
+  <!-- SysAdmin use cases -->
+  <ellipse cx="380" cy="445" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="450" text-anchor="middle" font-size="12">Наполнение базы данных</text>
+
+  <ellipse cx="380" cy="505" rx="150" ry="22" fill="#fff" stroke="#000" stroke-width="1.5"/>
+  <text x="380" y="510" text-anchor="middle" font-size="12">Импорт данных из Excel</text>
+
+  <!-- Lines: Admin → use cases -->
+  <line x1="83" y1="210" x2="228" y2="85" stroke="#000" stroke-width="1"/>
+  <line x1="83" y1="218" x2="228" y2="145" stroke="#000" stroke-width="1"/>
+  <line x1="83" y1="235" x2="228" y2="205" stroke="#000" stroke-width="1"/>
+  <line x1="83" y1="252" x2="228" y2="265" stroke="#000" stroke-width="1"/>
+  <line x1="83" y1="265" x2="228" y2="325" stroke="#000" stroke-width="1"/>
+  <line x1="83" y1="270" x2="228" y2="385" stroke="#000" stroke-width="1"/>
+
+  <!-- Lines: SysAdmin → use cases -->
+  <line x1="677" y1="388" x2="532" y2="445" stroke="#000" stroke-width="1"/>
+  <line x1="677" y1="395" x2="532" y2="505" stroke="#000" stroke-width="1"/>
+
+  <!-- extend: Импорт extends Наполнение -->
+  <line x1="380" y1="483" x2="380" y2="467" stroke="#000" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#arrd)"/>
+  <text x="395" y="477" font-size="10" font-style="italic">«extend»</text>
+
+  <defs>
+    <marker id="arrd" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#000"/>
+    </marker>
+  </defs>
+</svg>
