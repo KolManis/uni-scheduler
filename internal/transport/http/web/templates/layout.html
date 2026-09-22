@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{block "title" .}}Расписание кафедры{{end}}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" hx-get="/ui/schedules" hx-target="#main" href="/ui/schedules">uni-scheduler</a>
+  <a hx-get="/ui/schedules" hx-target="#main" href="/ui/schedules">Расписания</a>
+  <a hx-get="/ui/teachers" hx-target="#main" href="/ui/teachers">Преподаватели</a>
+  <a hx-get="/ui/subject-plans" hx-target="#main" href="/ui/subject-plans">Учебные планы</a>
+  <a hx-get="/ui/groups" hx-target="#main" href="/ui/groups">Группы</a>
+  <a hx-get="/ui/rooms" hx-target="#main" href="/ui/rooms">Аудитории</a>
+  <a hx-get="/ui/buildings" hx-target="#main" href="/ui/buildings">Корпуса</a>
+  <a hx-get="/ui/departments" hx-target="#main" href="/ui/departments">Кафедры</a>
+</nav>
+<main id="main">
+{{template "content" .}}
+</main>
+</body>
+</html>

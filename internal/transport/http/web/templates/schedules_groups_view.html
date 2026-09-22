@@ -1,0 +1,57 @@
+{{define "title"}}Расписание по группам{{end}}
+{{define "content"}}
+{{$id := .Schedule.ID}}
+{{$teachers := .Teachers}}
+{{$rooms := .Rooms}}
+{{$subjectPlans := .SubjectPlans}}
+<div class="toolbar">
+  <h1>{{.Schedule.Name}} <span class="muted">— по группам</span></h1>
+  <div class="actions">
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}" hx-target="#main" href="/ui/schedules/{{$id}}">← по дням</a>
+    <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_groups" target="_blank">Excel: все группы</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <div class="hint">Красным подсвечены настоящие окна — пустая пара МЕЖДУ двумя занятиями группы в один день.</div>
+  <div style="margin-top:8px;">
+    {{range .Blocks}}<a class="btn small secondary" href="#g-{{.GroupID}}" style="margin:2px;">{{.GroupName}}</a>{{end}}
+  </div>
+</div>
+
+{{range .Blocks}}
+<h2 id="g-{{.GroupID}}">{{.GroupName}}</h2>
+<table class="group-grid" style="margin-bottom:24px;">
+  <thead>
+    <tr><th>Пара</th>{{range $.Days}}<th>{{dayLabel .}}</th>{{end}}</tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    <tr>
+      <td>{{.PairNum}}</td>
+      {{range .Cells}}
+      {{if .IsGap}}
+      <td class="gap-cell">окно</td>
+      {{else if .Items}}
+      <td>
+        {{range .Items}}
+        <div style="margin-bottom:4px;">
+          <b>{{subjectName $subjectPlans .SubjectID}}</b> ({{.Type}})<br>
+          {{teacherName $teachers .TeacherID}}<br>
+          ауд. {{roomNumber $rooms .RoomID}}
+          {{if ne .Parity "always"}}<br><span class="muted">{{.Parity}}</span>{{end}}
+        </div>
+        {{end}}
+      </td>
+      {{else}}
+      <td></td>
+      {{end}}
+      {{end}}
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted">В этом расписании нет занятий.</p>
+{{end}}
+{{end}}

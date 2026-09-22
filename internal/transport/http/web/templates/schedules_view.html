@@ -1,0 +1,91 @@
+{{define "title"}}Просмотр расписания{{end}}
+{{define "content"}}
+{{$id := .Schedule.ID}}
+{{$teachers := .Teachers}}
+{{$rooms := .Rooms}}
+{{$groups := .Groups}}
+{{$subjectPlans := .SubjectPlans}}
+<div class="toolbar">
+  <h1>{{.Schedule.Name}} <span class="muted">(score={{.Schedule.Score}}, занятий={{len .Schedule.Assignments}})</span></h1>
+  <div class="actions">
+    <a class="btn secondary" hx-get="/ui/schedules" hx-target="#main" href="/ui/schedules">← к списку</a>
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/groups" hx-target="#main" href="/ui/schedules/{{$id}}/groups">По группам</a>
+    <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_teachers" target="_blank">Excel: все преподаватели</a>
+    <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_groups" target="_blank">Excel: все группы</a>
+  </div>
+</div>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+{{if .Success}}<div class="banner success">{{.Success}}</div>{{end}}
+
+<details class="card" style="margin-bottom:20px;">
+  <summary style="cursor:pointer; font-weight:600;">Из чего складывается score ({{.Schedule.Score}})</summary>
+  <table style="margin-top:12px;">
+    <thead><tr><th>Категория</th><th>Баллы</th><th>Что это значит</th></tr></thead>
+    <tbody>
+      <tr><td>Суббота</td><td class="{{if .Breakdown.Saturday}}score-bad{{end}}">{{.Breakdown.Saturday}}</td><td>занятия в субботу, особенно единичные у группы</td></tr>
+      <tr><td>Перегрузка дня (группы)</td><td class="{{if .Breakdown.GroupDayOverload}}score-bad{{end}}">{{.Breakdown.GroupDayOverload}}</td><td>4+ пар в один день у группы</td></tr>
+      <tr><td>Длинный день (группы)</td><td class="{{if .Breakdown.GroupLongDay}}score-bad{{end}}">{{.Breakdown.GroupLongDay}}</td><td>больше 4 пар подряд без окон</td></tr>
+      <tr><td>Мало дней (группы)</td><td class="{{if .Breakdown.GroupTooFewDays}}score-bad{{end}}">{{.Breakdown.GroupTooFewDays}}</td><td>большая нагрузка втиснута в 1-2 дня</td></tr>
+      <tr><td>Перегрузка дня (преподаватели)</td><td class="{{if .Breakdown.TeacherDayOverload}}score-bad{{end}}">{{.Breakdown.TeacherDayOverload}}</td><td>больше 2 пар в день у одного преподавателя</td></tr>
+      <tr><td>Концентрация (преподаватели)</td><td class="{{if .Breakdown.TeacherConcentration}}score-bad{{end}}">{{.Breakdown.TeacherConcentration}}</td><td>нагрузка не размазана по неделе (&lt;3 дней)</td></tr>
+      <tr><td>Окна у групп</td><td class="{{if .Breakdown.GroupGaps}}score-bad{{end}}">{{.Breakdown.GroupGaps}}</td><td><b>самое дорогое</b>: 10000 за каждое «окно» между парами группы за день</td></tr>
+      <tr><td>Окна у преподавателей</td><td class="{{if .Breakdown.TeacherGaps}}score-bad{{end}}">{{.Breakdown.TeacherGaps}}</td><td>то же самое, но для преподавателя (дешевле)</td></tr>
+      <tr><td>Переходы между корпусами</td><td class="{{if .Breakdown.BuildingTransitions}}score-bad{{end}}">{{.Breakdown.BuildingTransitions}}</td><td>занятия группы подряд в разных корпусах</td></tr>
+      <tr><td>«Форточка»</td><td class="{{if .Breakdown.SingleClassDay}}score-bad{{end}}">{{.Breakdown.SingleClassDay}}</td><td>всего 1 пара в день у группы</td></tr>
+    </tbody>
+  </table>
+</details>
+
+{{if .Schedule.Unplaced}}
+<div class="banner error">
+  Не удалось разместить {{len .Schedule.Unplaced}} занятие(й) — не хватило свободных слотов/аудиторий с учётом ограничений.
+  Возможные причины: недостаточно аудиторий нужного типа (`requires_room_type`), маленькая вместимость для потока,
+  преподаватель перегружен (`max_weekly_hours`) или слишком много `unavailable_slots`.
+</div>
+<table style="margin-bottom:20px;">
+  <thead><tr><th>Дисциплина</th><th>Тип</th><th>Преподаватель</th><th>Группы</th><th>Нужен тип ауд.</th><th>Не хватает часов</th></tr></thead>
+  <tbody>
+    {{range .Schedule.Unplaced}}
+    {{$plan := planByID $subjectPlans .SubjectID}}
+    <tr>
+      <td>{{$plan.Name}}</td>
+      <td>{{.Type}}</td>
+      <td>{{teacherName $teachers $plan.TeacherID}}</td>
+      <td>{{joinNames $groups $plan.GroupIDs}}</td>
+      <td>{{if $plan.RequiresRoomType}}{{$plan.RequiresRoomType}}{{else}}<span class="muted">любой</span>{{end}}</td>
+      <td class="score-bad">{{.MissingHours}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{range .DayGroups}}
+{{$day := .Day}}
+<h2>{{dayLabel $day}}</h2>
+<table style="margin-bottom:20px;">
+  <thead><tr><th>Пара</th><th>Дисциплина</th><th>Тип</th><th>Преподаватель</th><th>Группы</th><th>Ауд.</th><th>Чётность</th><th></th></tr></thead>
+  <tbody>
+    {{range .Pairs}}
+    {{$pairNum := .PairNum}}
+    {{range .Items}}
+    <tr>
+      <td>{{$pairNum}}</td>
+      <td>{{subjectName $subjectPlans .SubjectID}}</td>
+      <td>{{.Type}}</td>
+      <td>{{teacherName $teachers .TeacherID}}</td>
+      <td>{{joinNames $groups .GroupIDs}}</td>
+      <td>{{roomNumber $rooms .RoomID}}</td>
+      <td>{{.Parity}}</td>
+      <td class="actions">
+        <a class="btn small secondary" hx-get="/ui/schedules/{{$id}}/assignments/{{.Idx}}/edit" hx-target="#main" href="/ui/schedules/{{$id}}/assignments/{{.Idx}}/edit">Изменить</a>
+      </td>
+    </tr>
+    {{end}}
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted">В этом расписании нет занятий.</p>
+{{end}}
+{{end}}

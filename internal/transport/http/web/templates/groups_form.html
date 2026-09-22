@@ -1,0 +1,32 @@
+{{define "title"}}Группа{{end}}
+{{define "content"}}
+{{$current := .Group.BuildingIDs}}
+<h1>{{if .IsEdit}}Изменить группу{{else}}Новая группа{{end}}</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form class="card"
+  {{if .IsEdit}}hx-put="/ui/groups/{{.Group.ID}}"{{else}}hx-post="/ui/groups"{{end}}
+  hx-target="#main" hx-push-url="/ui/groups">
+  <div class="form-row">
+    <div class="field">
+      <label>Название</label>
+      <input type="text" name="name" value="{{.Group.Name}}" required>
+    </div>
+    <div class="field">
+      <label>Количество студентов</label>
+      <input type="number" name="student_count" min="0" value="{{.Group.StudentCount}}" required>
+    </div>
+  </div>
+  <div class="field">
+    <label>Допустимые корпуса <span class="hint">(если ни один не выбран — подходит любой)</span></label>
+    <div class="checkbox-grid">
+      {{range .Buildings}}
+      <label><input type="checkbox" name="building_ids" value="{{.ID}}" {{if contains $current .ID}}checked{{end}}> {{.Name}}</label>
+      {{else}}
+      <span class="muted">Сначала добавьте корпуса</span>
+      {{end}}
+    </div>
+  </div>
+  <button class="btn" type="submit">Сохранить</button>
+  <a class="btn secondary" hx-get="/ui/groups" hx-target="#main" href="/ui/groups">Отмена</a>
+</form>
+{{end}}

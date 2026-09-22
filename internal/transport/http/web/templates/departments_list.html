@@ -1,0 +1,24 @@
+{{define "title"}}Кафедры{{end}}
+{{define "content"}}
+<div class="toolbar">
+  <h1>Кафедры</h1>
+  <a class="btn" hx-get="/ui/departments/new" hx-target="#main" href="/ui/departments/new">+ Добавить кафедру</a>
+</div>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<table>
+  <thead><tr><th>Название</th><th></th></tr></thead>
+  <tbody>
+    {{range .Departments}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td class="actions">
+        <a class="btn small secondary" hx-get="/ui/departments/{{.ID}}/edit" hx-target="#main" href="/ui/departments/{{.ID}}/edit">Изменить</a>
+        <button class="btn small danger" hx-delete="/ui/departments/{{.ID}}" hx-target="#main" hx-confirm="Удалить кафедру «{{.Name}}»?">Удалить</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="2" class="muted">Пока нет ни одной кафедры</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

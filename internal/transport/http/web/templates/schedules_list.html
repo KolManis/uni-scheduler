@@ -1,0 +1,64 @@
+{{define "title"}}Расписания{{end}}
+{{define "content"}}
+<h1>Расписания</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+{{if .Success}}<div class="banner success">{{.Success}}</div>{{end}}
+
+<div class="card" style="margin-bottom:24px;">
+  <h2>Сгенерировать новое расписание</h2>
+  <form hx-post="/ui/schedules/generate" hx-target="#main">
+    <div class="form-row">
+      <div class="field">
+        <label>Название</label>
+        <input type="text" name="name" placeholder="ФС 2025/2026" required>
+      </div>
+      <div class="field">
+        <label>Алгоритм</label>
+        <select name="solver_type">
+          <option value="teacher">teacher-driven (основной)</option>
+          <option value="subject">subject (backtracking, fallback)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Таймаут, сек</label>
+        <input type="number" name="timeout_sec" min="5" value="60">
+      </div>
+      <div class="field">
+        <label>Половина семестра</label>
+        <select name="semester_half">
+          <option value="">Весь семестр</option>
+          <option value="first">1-я половина</option>
+          <option value="second">2-я половина</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" type="submit">Сгенерировать</button>
+    <span class="muted">Может занять до минуты — дождитесь ответа.</span>
+  </form>
+</div>
+
+<h2>Готовые расписания</h2>
+<table>
+  <thead><tr><th>Название</th><th>Занятий</th><th>Score <span class="muted">(меньше — лучше)</span></th><th>Не размещено</th><th>Создано</th><th></th></tr></thead>
+  <tbody>
+    {{range .Schedules}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td>{{.TotalPairs}}</td>
+      <td>{{.Score}}</td>
+      <td>{{if .UnplacedCount}}<span class="score-bad">{{.UnplacedCount}}</span>{{else}}<span class="score-good">0</span>{{end}}</td>
+      <td>{{.CreatedAt.Format "02.01.2006 15:04"}}</td>
+      <td class="actions">
+        <a class="btn small secondary" hx-get="/ui/schedules/{{.ID}}" hx-target="#main" href="/ui/schedules/{{.ID}}">Открыть</a>
+        <a class="btn small secondary" href="/api/v1/schedules/{{.ID}}/excel?type=all_teachers" target="_blank">Excel</a>
+        <button class="btn small danger" hx-delete="/ui/schedules/{{.ID}}" hx-target="#main" hx-confirm="Удалить расписание «{{.Name}}»?">Удалить</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="6" class="muted">Расписаний пока нет — сгенерируйте первое выше</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

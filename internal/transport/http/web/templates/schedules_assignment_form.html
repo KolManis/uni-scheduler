@@ -1,0 +1,54 @@
+{{define "title"}}Перенос занятия{{end}}
+{{define "content"}}
+{{$a := .Assignment}}
+{{$day := .Assignment.TimeSlot.Day}}
+{{$pair := .Assignment.TimeSlot.PairNum}}
+{{$room := .Assignment.RoomID}}
+{{$parity := .Assignment.Parity}}
+<h1>Перенести занятие</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<div class="card" style="margin-bottom:16px;">
+  <div class="muted">
+    {{subjectName .SubjectPlans $a.SubjectID}} · {{$a.Type}} ·
+    {{teacherName .Teachers $a.TeacherID}} ·
+    группы: {{joinNames .Groups $a.GroupIDs}}
+  </div>
+</div>
+<form class="card" hx-patch="/ui/schedules/{{.ScheduleID}}/assignments/{{.Idx}}" hx-target="#main">
+  <div class="form-row">
+    <div class="field">
+      <label>День</label>
+      <select name="day">
+        {{range .Days}}<option value="{{.}}" {{if eq . $day}}selected{{end}}>{{dayLabel .}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label>Пара</label>
+      <select name="pair_num">
+        {{range .Pairs}}<option value="{{.}}" {{if eq . $pair}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="field">
+      <label>Аудитория</label>
+      <select name="room_id">
+        {{range .Rooms}}<option value="{{.ID}}" {{if eq .ID $room}}selected{{end}}>{{.Number}} ({{.Capacity}} мест, {{.Type}})</option>{{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label>Чётность</label>
+      <select name="parity">
+        <option value="always" {{if eq $parity "always"}}selected{{end}}>Каждую неделю</option>
+        <option value="odd" {{if eq $parity "odd"}}selected{{end}}>Нечётная неделя</option>
+        <option value="even" {{if eq $parity "even"}}selected{{end}}>Чётная неделя</option>
+      </select>
+    </div>
+  </div>
+  <div class="hint" style="margin-bottom:12px;">
+    Перенос проверяется на конфликты (HC1–HC3): преподаватель/группа/аудитория не должны быть заняты в новом слоте.
+  </div>
+  <button class="btn" type="submit">Сохранить перенос</button>
+  <a class="btn secondary" hx-get="/ui/schedules/{{.ScheduleID}}" hx-target="#main" href="/ui/schedules/{{.ScheduleID}}">Отмена</a>
+</form>
+{{end}}

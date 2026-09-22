@@ -337,6 +337,236 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ========== all_groups ==========
+	if viewType == "all_groups" {
+		type slotInfo struct {
+			even *schedule.Assignment
+			odd  *schedule.Assignment
+		}
+		groupGrid := make(map[string]map[schedule.Day]map[int]*slotInfo)
+
+		for i := range sched.Assignments {
+			a := sched.Assignments[i]
+			if !matchesWeek(a) {
+				continue
+			}
+			day := a.TimeSlot.Day
+			pair := a.TimeSlot.PairNum
+			if pair < 1 || pair > 6 {
+				continue
+			}
+			for _, gid := range a.GroupIDs {
+				if groupGrid[gid] == nil {
+					groupGrid[gid] = make(map[schedule.Day]map[int]*slotInfo)
+				}
+				if groupGrid[gid][day] == nil {
+					groupGrid[gid][day] = make(map[int]*slotInfo)
+				}
+				if groupGrid[gid][day][pair] == nil {
+					groupGrid[gid][day][pair] = &slotInfo{}
+				}
+				info := groupGrid[gid][day][pair]
+
+				if a.Parity == schedule.Always {
+					info.even = &a
+					info.odd = &a
+				} else if a.Parity == schedule.Even {
+					info.even = &a
+				} else if a.Parity == schedule.Odd {
+					info.odd = &a
+				}
+			}
+		}
+
+		groups := input.Groups
+		sort.Slice(groups, func(i, j int) bool {
+			return groupMap[groups[i].ID] < groupMap[groups[j].ID]
+		})
+
+		f := excelize.NewFile()
+		defer f.Close()
+		sheet := "Все группы"
+		f.SetSheetName("Sheet1", sheet)
+
+		borderStyle := []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+		}
+		style, _ := f.NewStyle(&excelize.Style{
+			Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+			Border:    borderStyle,
+		})
+		styleGreen, _ := f.NewStyle(&excelize.Style{
+			Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+			Border:    borderStyle,
+			Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"E2EFDA"}},
+		})
+		dayStyle := func(dayIdx int) int {
+			if dayIdx%2 == 0 {
+				return styleGreen
+			}
+			return style
+		}
+
+		// Заголовки
+		f.SetCellValue(sheet, "A1", "День")
+		f.SetCellValue(sheet, "B1", "Время")
+		for i, g := range groups {
+			col, _ := excelize.CoordinatesToCellName(i+3, 1)
+			f.SetCellValue(sheet, col, groupMap[g.ID])
+		}
+
+		currentRow := 2
+		for dayIdx, day := range days {
+			ds := dayStyle(dayIdx)
+			for pair := 1; pair <= 6; pair++ {
+				startRow := currentRow
+				timeStr := timeSlots[pair]
+
+				// Для КАЖДОЙ группы определяем, сколько строк ей нужно
+				groupRowsNeeded := make(map[string]int)
+				maxRowsForSlot := 1
+
+				for _, g := range groups {
+					info := groupGrid[g.ID][day][pair]
+					if info == nil {
+						groupRowsNeeded[g.ID] = 1
+						continue
+					}
+
+					isAlways := info.even != nil && info.odd != nil && info.even == info.odd
+					if isAlways {
+						groupRowsNeeded[g.ID] = 1
+					} else {
+						groupRowsNeeded[g.ID] = 2
+						if maxRowsForSlot < 2 {
+							maxRowsForSlot = 2
+						}
+					}
+				}
+
+				// Сначала заполняем значения
+				for subRow := 0; subRow < maxRowsForSlot; subRow++ {
+					row := currentRow + subRow
+
+					parityFilter := schedule.Always
+					if maxRowsForSlot == 2 {
+						if subRow == 0 {
+							parityFilter = schedule.Even
+						} else {
+							parityFilter = schedule.Odd
+						}
+					}
+
+					for colIndex, g := range groups {
+						col := colIndex + 3
+						cellRef, _ := excelize.CoordinatesToCellName(col, row)
+
+						info := groupGrid[g.ID][day][pair]
+						if info == nil {
+							f.SetCellStyle(sheet, cellRef, cellRef, ds)
+							continue
+						}
+
+						var a *schedule.Assignment
+						rowsNeeded := groupRowsNeeded[g.ID]
+
+						if rowsNeeded == 1 {
+							if info.even != nil && info.odd != nil && info.even == info.odd {
+								a = info.even
+							} else if info.even != nil {
+								a = info.even
+							} else if info.odd != nil {
+								a = info.odd
+							}
+						} else {
+							if parityFilter == schedule.Even && info.even != nil {
+								a = info.even
+							} else if parityFilter == schedule.Odd && info.odd != nil {
+								a = info.odd
+							}
+						}
+
+						if a != nil {
+							subject := subjectMap[a.SubjectID]
+							if subject == "" {
+								subject = a.SubjectID
+							}
+							room := roomMap[a.RoomID]
+							if room == "" {
+								room = a.RoomID
+							}
+							typeStr := string(a.Type)
+							switch a.Type {
+							case schedule.Lecture:
+								typeStr = "лек"
+							case schedule.Practice:
+								typeStr = "пр"
+							case schedule.Lab:
+								typeStr = "лаб"
+							}
+
+							teacherName := teacherMap[a.TeacherID]
+							value := fmt.Sprintf("%s (%s)\n%s\nауд.%s", subject, typeStr, teacherName, room)
+
+							if rowsNeeded == 2 {
+								if parityFilter == schedule.Even {
+									value = value + "\n(чётная неделя)"
+								} else {
+									value = value + "\n(нечётная неделя)"
+								}
+							}
+							f.SetCellValue(sheet, cellRef, value)
+						}
+						f.SetCellStyle(sheet, cellRef, cellRef, ds)
+					}
+				}
+
+				// Объединяем ячейки День и Время
+				if maxRowsForSlot > 1 {
+					f.MergeCell(sheet, fmt.Sprintf("A%d", startRow), fmt.Sprintf("A%d", startRow+maxRowsForSlot-1))
+					f.MergeCell(sheet, fmt.Sprintf("B%d", startRow), fmt.Sprintf("B%d", startRow+maxRowsForSlot-1))
+				}
+
+				f.SetCellValue(sheet, fmt.Sprintf("A%d", startRow), dayNames[day])
+				f.SetCellValue(sheet, fmt.Sprintf("B%d", startRow), timeStr)
+				f.SetCellStyle(sheet, fmt.Sprintf("A%d", startRow), fmt.Sprintf("B%d", startRow+maxRowsForSlot-1), ds)
+
+				// Объединяем ячейки для групп с rowsNeeded = 1
+				if maxRowsForSlot == 2 {
+					for colIndex, g := range groups {
+						if groupRowsNeeded[g.ID] == 1 {
+							col, _ := excelize.CoordinatesToCellName(colIndex+3, startRow)
+							endCol, _ := excelize.CoordinatesToCellName(colIndex+3, startRow+1)
+							f.MergeCell(sheet, col, endCol)
+						}
+					}
+				}
+
+				// Высота строк
+				for subRow := 0; subRow < maxRowsForSlot; subRow++ {
+					f.SetRowHeight(sheet, startRow+subRow, 60)
+				}
+
+				currentRow += maxRowsForSlot
+			}
+		}
+
+		// Ширина столбцов
+		lastColName, _ := excelize.ColumnNumberToName(len(groups) + 2)
+		f.SetColWidth(sheet, "A", "A", 16)
+		f.SetColWidth(sheet, "B", "B", 8)
+		f.SetColWidth(sheet, "C", lastColName, 28)
+
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=groups_schedule_%d.xlsx", scheduleID))
+		w.WriteHeader(http.StatusOK)
+		f.Write(w)
+		return
+	}
+
 	// ========== year ==========
 	if viewType == "year" {
 		yearParam := r.URL.Query().Get("year")

@@ -1,0 +1,78 @@
+{{define "title"}}Преподаватель{{end}}
+{{define "content"}}
+{{$slots := .Teacher.UnavailableSlots}}
+{{$prefBuildings := .Teacher.PreferredBuildings}}
+<h1>{{if .IsEdit}}Изменить преподавателя{{else}}Новый преподаватель{{end}}</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form class="card"
+  {{if .IsEdit}}hx-put="/ui/teachers/{{.Teacher.ID}}"{{else}}hx-post="/ui/teachers"{{end}}
+  hx-target="#main" hx-push-url="/ui/teachers">
+  <div class="form-row">
+    <div class="field">
+      <label>ФИО</label>
+      <input type="text" name="name" value="{{.Teacher.Name}}" required>
+    </div>
+    <div class="field">
+      <label>Кафедра</label>
+      <select name="department_id" required>
+        <option value="">— выберите кафедру —</option>
+        {{$dep := .Teacher.DepartmentID}}
+        {{range .Departments}}
+        <option value="{{.ID}}" {{if eq .ID $dep}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label>Часов в неделю (максимум)</label>
+      <input type="number" name="max_weekly_hours" min="0" value="{{.Teacher.MaxWeeklyHours}}" required>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Недоступные пары <span class="hint">(условие — солвер не будет ставить занятия в отмеченные слоты; галочка в шапке — сразу весь день)</span></label>
+    <div class="slot-grid">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            {{range .Days}}
+            <th>
+              <label class="day-toggle">
+                <input type="checkbox" onclick="toggleDayColumn(this, '{{.}}')" {{if allPairsUnavailable $slots . $.Pairs}}checked{{end}}>
+                {{dayLabel .}}
+              </label>
+            </th>
+            {{end}}
+          </tr>
+        </thead>
+        <tbody>
+          {{$days := .Days}}
+          {{range .Pairs}}
+          {{$pair := .}}
+          <tr>
+            <td>{{$pair}} пара</td>
+            {{range $days}}
+            <td><input type="checkbox" name="unavailable" value="{{.}}:{{$pair}}" {{if hasUnavailable $slots . $pair}}checked{{end}}></td>
+            {{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Предпочитаемые корпуса <span class="hint">(если ни один не выбран — подходит любой)</span></label>
+    <div class="checkbox-grid">
+      {{range .Buildings}}
+      <label><input type="checkbox" name="preferred_buildings" value="{{.ID}}" {{if contains $prefBuildings .ID}}checked{{end}}> {{.Name}}</label>
+      {{else}}
+      <span class="muted">Сначала добавьте корпуса</span>
+      {{end}}
+    </div>
+  </div>
+
+  <button class="btn" type="submit">Сохранить</button>
+  <a class="btn secondary" hx-get="/ui/teachers" hx-target="#main" href="/ui/teachers">Отмена</a>
+</form>
+{{end}}

@@ -13,6 +13,7 @@ import (
 	repo "github.com/KolManis/uni-scheduler/internal/repository/postgres"
 	httpTransport "github.com/KolManis/uni-scheduler/internal/transport/http"
 	"github.com/KolManis/uni-scheduler/internal/transport/http/handlers"
+	"github.com/KolManis/uni-scheduler/internal/transport/http/web"
 	"github.com/KolManis/uni-scheduler/internal/usecase/generator"
 )
 
@@ -52,8 +53,9 @@ func main() {
 	importHandler := handlers.NewImportHandler(svc)
 	referenceHandler := handlers.NewReferenceHandler(inputRepo)
 	refWriteHandler := handlers.NewRefWriteHandler(refWriteRepo)
+	webHandler := web.NewHandler(inputRepo, refWriteRepo, svc)
 
-	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler, refWriteHandler)
+	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler, refWriteHandler, webHandler)
 
 	server := &http.Server{
 		Addr:              httpAddr,

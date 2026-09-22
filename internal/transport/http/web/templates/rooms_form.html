@@ -1,0 +1,41 @@
+{{define "title"}}Аудитория{{end}}
+{{define "content"}}
+<h1>{{if .IsEdit}}Изменить аудиторию{{else}}Новая аудитория{{end}}</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form class="card"
+  {{if .IsEdit}}hx-put="/ui/rooms/{{.Room.ID}}"{{else}}hx-post="/ui/rooms"{{end}}
+  hx-target="#main" hx-push-url="/ui/rooms">
+  <div class="form-row">
+    <div class="field">
+      <label>Номер</label>
+      <input type="text" name="number" value="{{.Room.Number}}" required>
+    </div>
+    <div class="field">
+      <label>Вместимость</label>
+      <input type="number" name="capacity" min="1" value="{{.Room.Capacity}}" required>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="field">
+      <label>Корпус</label>
+      <select name="building_id" required>
+        <option value="">— выберите корпус —</option>
+        {{$current := .Room.BuildingID}}
+        {{range .Buildings}}
+        <option value="{{.ID}}" {{if eq .ID $current}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label>Тип аудитории</label>
+      <input type="text" name="type" list="room-types" value="{{.Room.Type}}" required>
+      <datalist id="room-types">
+        {{range .RoomTypes}}<option value="{{.}}">{{end}}
+      </datalist>
+      <div class="hint">lecture — лекционная, lab — лаборатория, computer — компьютерный класс (или свой тип)</div>
+    </div>
+  </div>
+  <button class="btn" type="submit">Сохранить</button>
+  <a class="btn secondary" hx-get="/ui/rooms" hx-target="#main" href="/ui/rooms">Отмена</a>
+</form>
+{{end}}

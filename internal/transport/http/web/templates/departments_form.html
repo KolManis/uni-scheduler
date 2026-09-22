@@ -1,0 +1,15 @@
+{{define "title"}}Кафедра{{end}}
+{{define "content"}}
+<h1>{{if .IsEdit}}Изменить кафедру{{else}}Новая кафедра{{end}}</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form class="card"
+  {{if .IsEdit}}hx-put="/ui/departments/{{.Department.ID}}"{{else}}hx-post="/ui/departments"{{end}}
+  hx-target="#main" hx-push-url="/ui/departments">
+  <div class="field">
+    <label>Название</label>
+    <input type="text" name="name" value="{{.Department.Name}}" required>
+  </div>
+  <button class="btn" type="submit">Сохранить</button>
+  <a class="btn secondary" hx-get="/ui/departments" hx-target="#main" href="/ui/departments">Отмена</a>
+</form>
+{{end}}

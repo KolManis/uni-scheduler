@@ -1,0 +1,99 @@
+{{define "title"}}Учебный план{{end}}
+{{define "content"}}
+{{$currentGroups := .Plan.GroupIDs}}
+{{$dep := .Plan.DepartmentID}}
+{{$teacher := .Plan.TeacherID}}
+{{$reqBld := .Plan.RequiredBuildingID}}
+{{$parity := .Plan.Parity}}
+{{$half := .Plan.SemesterHalf}}
+<h1>{{if .IsEdit}}Изменить учебный план{{else}}Новый учебный план{{end}}</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form class="card"
+  {{if .IsEdit}}hx-put="/ui/subject-plans/{{.Plan.ID}}"{{else}}hx-post="/ui/subject-plans"{{end}}
+  hx-target="#main" hx-push-url="/ui/subject-plans">
+  <div class="field">
+    <label>Название дисциплины</label>
+    <input type="text" name="name" value="{{.Plan.Name}}" required>
+  </div>
+
+  <div class="form-row">
+    <div class="field">
+      <label>Кафедра</label>
+      <select name="department_id">
+        <option value="">— не указана —</option>
+        {{range .Departments}}<option value="{{.ID}}" {{if eq .ID $dep}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label>Преподаватель</label>
+      <select name="teacher_id" required>
+        <option value="">— выберите преподавателя —</option>
+        {{range .Teachers}}<option value="{{.ID}}" {{if eq .ID $teacher}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="field">
+      <label>Часы лекций</label>
+      <input type="number" name="lecture_hours" min="0" value="{{.Plan.LectureHours}}">
+    </div>
+    <div class="field">
+      <label>Часы практик</label>
+      <input type="number" name="practice_hours" min="0" value="{{.Plan.PracticeHours}}">
+    </div>
+    <div class="field">
+      <label>Часы лабораторных</label>
+      <input type="number" name="lab_hours" min="0" value="{{.Plan.LabHours}}">
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="field">
+      <label>Требуемый тип аудитории</label>
+      <input type="text" name="requires_room_type" list="room-types" value="{{.Plan.RequiresRoomType}}">
+      <datalist id="room-types">{{range .RoomTypes}}<option value="{{.}}">{{end}}</datalist>
+    </div>
+    <div class="field">
+      <label>Обязательный корпус <span class="hint">(если задан — занятие только там)</span></label>
+      <select name="required_building_id">
+        <option value="">— любой —</option>
+        {{range .Buildings}}<option value="{{.ID}}" {{if eq .ID $reqBld}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row">
+    <div class="field">
+      <label>Чётность недель</label>
+      <select name="parity">
+        <option value="always" {{if eq $parity "always"}}selected{{end}}>Каждую неделю</option>
+        <option value="odd" {{if eq $parity "odd"}}selected{{end}}>Нечётная неделя</option>
+        <option value="even" {{if eq $parity "even"}}selected{{end}}>Чётная неделя</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Половина семестра</label>
+      <select name="semester_half">
+        <option value="full" {{if eq $half "full"}}selected{{end}}>Весь семестр</option>
+        <option value="first" {{if eq $half "first"}}selected{{end}}>1-я половина (1–8 нед.)</option>
+        <option value="second" {{if eq $half "second"}}selected{{end}}>2-я половина (9–16 нед.)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Группы</label>
+    <div class="checkbox-grid">
+      {{range .Groups}}
+      <label><input type="checkbox" name="group_ids" value="{{.ID}}" {{if contains $currentGroups .ID}}checked{{end}}> {{.Name}}</label>
+      {{else}}
+      <span class="muted">Сначала добавьте группы</span>
+      {{end}}
+    </div>
+  </div>
+
+  <button class="btn" type="submit">Сохранить</button>
+  <a class="btn secondary" hx-get="/ui/subject-plans" hx-target="#main" href="/ui/subject-plans">Отмена</a>
+</form>
+{{end}}

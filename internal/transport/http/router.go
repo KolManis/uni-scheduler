@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/KolManis/uni-scheduler/internal/transport/http/handlers"
+	"github.com/KolManis/uni-scheduler/internal/transport/http/web"
 	"github.com/gorilla/mux"
 )
 
@@ -13,8 +14,12 @@ func NewRouter(
 	importHandler *handlers.ImportHandler,
 	referenceHandler *handlers.ReferenceHandler,
 	refWriteHandler *handlers.RefWriteHandler,
+	webHandler *web.Handler,
 ) *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
+
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", web.StaticHandler()))
+	webHandler.RegisterRoutes(router)
 
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

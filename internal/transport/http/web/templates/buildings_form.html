@@ -1,0 +1,19 @@
+{{define "title"}}Корпус{{end}}
+{{define "content"}}
+<h1>{{if .IsEdit}}Изменить корпус{{else}}Новый корпус{{end}}</h1>
+{{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
+<form class="card"
+  {{if .IsEdit}}hx-put="/ui/buildings/{{.Building.ID}}"{{else}}hx-post="/ui/buildings"{{end}}
+  hx-target="#main" hx-push-url="/ui/buildings">
+  <div class="field">
+    <label>Название</label>
+    <input type="text" name="name" value="{{.Building.Name}}" required>
+  </div>
+  <div class="field">
+    <label>Адрес</label>
+    <input type="text" name="address" value="{{.Building.Address}}">
+  </div>
+  <button class="btn" type="submit">Сохранить</button>
+  <a class="btn secondary" hx-get="/ui/buildings" hx-target="#main" href="/ui/buildings">Отмена</a>
+</form>
+{{end}}
