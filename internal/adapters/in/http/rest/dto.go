@@ -9,6 +9,7 @@ type GenerateRequest struct {
 	SolverType    string              `json:"solver_type"` // "teacher" | "subject"
 	TimeoutSec    int                 `json:"timeout_sec"`
 	SemesterHalf  domain.SemesterHalf `json:"semester_half"` // "" | "first" | "second"
+	ImproveAlgo   string              `json:"improve_algo"`  // "hillclimb" | "sa" | "tabu" | "ga"
 }
 
 // PatchAssignmentRequest — тело PATCH /schedules/{id}/assignments/{idx}.

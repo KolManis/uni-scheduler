@@ -23,6 +23,7 @@ type GenerateInput struct {
 	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
 	// "second" → исключить планы с semester_half="first" (2-я половина, лекции закончились)
 	// "" / "full" → всё без фильтрации (по умолчанию)
+	ImproveAlgo string // "hillclimb" (default) | "sa" | "tabu" | "ga"
 }
 
 // PatchRequest — запрос на изменение одного назначения.
@@ -100,11 +101,12 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		var result *domain.Schedule
 		var solveErr error
 
+		improve := solver.ImproveAlgorithm(in.ImproveAlgo)
 		switch in.SolverType {
 		case "subject":
 			result, solveErr = solver.SolveParallel(*data, in.MaxIterations, 4)
 		default:
-			result, solveErr = solver.SolveTeacher(*data, in.MaxIterations)
+			result, solveErr = solver.SolveTeacher(*data, in.MaxIterations, improve)
 		}
 		ch <- solveResult{result, solveErr}
 	}()

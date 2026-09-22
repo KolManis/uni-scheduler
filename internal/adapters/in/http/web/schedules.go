@@ -219,6 +219,7 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 		SolverType:   r.FormValue("solver_type"),
 		TimeoutSec:   atoi(r.FormValue("timeout_sec"), 30),
 		SemesterHalf: domain.SemesterHalf(r.FormValue("semester_half")),
+		ImproveAlgo:  r.FormValue("improve_algo"),
 	}
 	sched, err := h.svc.Generate(r.Context(), in)
 	if err != nil {

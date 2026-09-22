@@ -34,6 +34,17 @@
         </select>
       </div>
     </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Метод улучшения</label>
+        <select name="improve_algo">
+          <option value="hillclimb">Iterated local search (по умолчанию)</option>
+          <option value="sa">Имитация отжига (SA)</option>
+          <option value="tabu">Табу-поиск</option>
+          <option value="ga">Генетический алгоритм</option>
+        </select>
+      </div>
+    </div>
     <button class="btn" type="submit">Сгенерировать</button>
     <span class="muted">Может занять до минуты — дождитесь ответа.</span>
   </form>

@@ -26,7 +26,7 @@ func TestLocalSearch_ImprovesGapSchedule(t *testing.T) {
 	}
 
 	before := calculateFitness(assignments, domain.InputData{})
-	result := LocalSearch(assignments, domain.InputData{})
+	result := LocalSearch(assignments, domain.InputData{}, ImproveHillClimb)
 	after := calculateFitness(result, domain.InputData{})
 
 	if after > before {
@@ -68,7 +68,7 @@ func TestLocalSearch_NeverWorseThanPlainConverge(t *testing.T) {
 	input := domain.InputData{}
 
 	convergedOnly := converge(assignments, input, time.Now().Add(5*time.Second), nil)
-	full := LocalSearch(assignments, input)
+	full := LocalSearch(assignments, input, ImproveHillClimb)
 
 	convergedScore := calculateFitness(convergedOnly, input)
 	fullScore := calculateFitness(full, input)

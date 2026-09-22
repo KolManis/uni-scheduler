@@ -57,7 +57,7 @@ func newTeacherState(input domain.InputData) *teacherState {
 // Гибкость = (свободных пар в неделю) / (нужных часов). Мало пар в неделю и/или много
 // недоступных слотов = ниже гибкость = раньше в очереди. Разбиение состава на подпотоки
 // запрещено — см. placeGroupsSplit.
-func SolveTeacher(input domain.InputData, maxIter int) (*domain.Schedule, error) {
+func SolveTeacher(input domain.InputData, maxIter int, improve ImproveAlgorithm) (*domain.Schedule, error) {
 	state := newTeacherState(input)
 
 	teachers := orderTeachersByFlexibility(state)
@@ -74,13 +74,13 @@ func SolveTeacher(input domain.InputData, maxIter int) (*domain.Schedule, error)
 		return fallbackSolve(state)
 	}
 
-	// post-processing: local search 2-opt
-	improved := LocalSearch(state.assignments, state.input)
+	improved := LocalSearch(state.assignments, state.input, improve)
 	score := calculateFitness(improved, state.input)
 
 	state.logger.Info("teacher-driven solve complete",
 		"assignments", len(improved),
 		"score", score,
+		"improve", improve,
 	)
 
 	return &domain.Schedule{

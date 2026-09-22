@@ -44,21 +44,39 @@ func buildTeacherUnavailable(input domain.InputData) teacherUnavailable {
 	return m
 }
 
+// ImproveAlgorithm — какой мета-эвристикой улучшать расписание после детерминированной
+// сходимости. Все варианты работают на одинаковом окружении (тот же converge, тот же
+// checkHardConstraints, тот же fitness), различаются только стратегией выбора соседей.
+type ImproveAlgorithm string
+
+const (
+	ImproveHillClimb          ImproveAlgorithm = "hillclimb" // iteratedLocalSearch со случайным perturb (по умолчанию)
+	ImproveSimulatedAnnealing ImproveAlgorithm = "sa"        // имитация отжига: принимает ухудшающие ходы с падающей вероятностью
+	ImproveTabuSearch         ImproveAlgorithm = "tabu"      // табу-поиск: избегает недавних ходов через память
+	ImproveGeneticAlgorithm   ImproveAlgorithm = "ga"        // генетический: популяция расписаний с кроссовером
+)
+
 // LocalSearch улучшает расписание в два этапа, уложившись в localSearchTotalBudget суммарно:
-//  1. converge — обычные 2-opt/or-opt по очереди до тех пор, пока хоть один из них
-//     находит улучшение (одного прохода каждого не всегда достаточно: swap может
-//     открыть возможность для move, и наоборот).
-//  2. iteratedLocalSearch — поверх результата: случайно "встряхиваем" расписание
-//     несколькими валидными обменами слотов (даже если это временно ухудшает score)
-//     и снова прогоняем converge. Это даёт шанс выбраться из локального оптимума,
-//     который чистый 2-opt/or-opt в принципе не видит (например когда убрать окно
-//     можно, только двигая два занятия согласованно). Результат никогда не хуже
-//     чистого 2-opt/or-opt — худшие попытки просто отбрасываются.
-func LocalSearch(assignments []domain.Assignment, input domain.InputData) []domain.Assignment {
+//  1. converge — детерминированные 2-opt/or-opt по очереди до сходимости.
+//  2. Одна из мета-эвристик (algo) поверх сошедшегося результата: помогает
+//     выбраться из локального оптимума, куда converge не пускает.
+//
+// Пустой algo эквивалентен ImproveHillClimb (значение по умолчанию, поведение как раньше).
+func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo ImproveAlgorithm) []domain.Assignment {
 	deadline := time.Now().Add(localSearchTotalBudget)
 	unavail := buildTeacherUnavailable(input)
 	current := converge(assignments, input, deadline, unavail)
-	current = iteratedLocalSearch(current, input, deadline, unavail)
+
+	switch algo {
+	case ImproveSimulatedAnnealing:
+		current = simulatedAnnealing(current, input, deadline, unavail)
+	case ImproveTabuSearch:
+		current = tabuSearch(current, input, deadline, unavail)
+	case ImproveGeneticAlgorithm:
+		current = geneticAlgorithm(current, input, deadline, unavail)
+	default: // ImproveHillClimb или пусто
+		current = iteratedLocalSearch(current, input, deadline, unavail)
+	}
 	return current
 }
 
