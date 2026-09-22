@@ -6,7 +6,7 @@
 
 <div class="card" style="margin-bottom:24px;">
   <h2>Сгенерировать новое расписание</h2>
-  <form hx-post="/ui/schedules/generate" hx-target="#main">
+  <form hx-post="/ui/schedules/generate" hx-target="#main" hx-pending-text="Генерируется… (до 2 мин)">
     <div class="form-row">
       <div class="field">
         <label>Название</label>
@@ -23,7 +23,7 @@
     <div class="form-row">
       <div class="field">
         <label>Таймаут, сек</label>
-        <input type="number" name="timeout_sec" min="5" value="60">
+        <input type="number" name="timeout_sec" min="5" value="120">
       </div>
       <div class="field">
         <label>Половина семестра</label>

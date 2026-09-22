@@ -89,7 +89,7 @@ func (r *OutputRepository) ListSchedules(ctx context.Context) ([]domain.Schedule
                jsonb_array_length(assignments) AS total_pairs,
                jsonb_array_length(COALESCE(unplaced, '[]'::jsonb)) AS unplaced_count
         FROM schedules
-        ORDER BY score ASC, created_at DESC
+        ORDER BY created_at DESC, id DESC
         LIMIT 100
     `
 

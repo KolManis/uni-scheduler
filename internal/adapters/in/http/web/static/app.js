@@ -19,7 +19,28 @@
     }
   }
 
-  async function doRequest(method, url, body, target, swapMode) {
+  // startPending — блокирует кнопки формы и подменяет их подпись на "hx-pending-text"
+  // (или «Обработка…»), чтобы пользователь видел, что запрос ушёл. Возвращает функцию отката.
+  function startPending(el) {
+    var buttons = el.tagName === "FORM"
+      ? el.querySelectorAll('button[type="submit"], button:not([type])')
+      : [el];
+    var pendingText = el.getAttribute("hx-pending-text") || "Обработка…";
+    var saved = [];
+    buttons.forEach(function (btn) {
+      saved.push({ btn: btn, text: btn.textContent, disabled: btn.disabled });
+      btn.textContent = pendingText;
+      btn.disabled = true;
+    });
+    if (el.tagName === "FORM") el.setAttribute("aria-busy", "true");
+    return function () {
+      saved.forEach(function (s) { s.btn.textContent = s.text; s.btn.disabled = s.disabled; });
+      if (el.tagName === "FORM") el.removeAttribute("aria-busy");
+    };
+  }
+
+  async function doRequest(method, url, body, target, swapMode, source) {
+    var stopPending = source ? startPending(source) : function () {};
     var resp;
     try {
       resp = await fetch(url, {
@@ -28,10 +49,12 @@
         body: body || undefined,
       });
     } catch (err) {
+      stopPending();
       alert("Ошибка сети: " + err);
       return null;
     }
     var text = await resp.text();
+    stopPending();
     swapInto(target, swapMode, text);
     bind(document);
     return resp;
@@ -42,7 +65,7 @@
     var url = el.getAttribute("hx-get");
     var target = targetFor(el);
     var swapMode = el.getAttribute("hx-swap") || "innerHTML";
-    doRequest("GET", url, null, target, swapMode).then(function (resp) {
+    doRequest("GET", url, null, target, swapMode, el).then(function (resp) {
       if (resp) history.pushState({}, "", url);
     });
   }
@@ -59,7 +82,7 @@
     if (el.tagName === "FORM") {
       body = new URLSearchParams(new FormData(el));
     }
-    doRequest(verb.toUpperCase(), url, body, target, swapMode).then(function (resp) {
+    doRequest(verb.toUpperCase(), url, body, target, swapMode, el).then(function (resp) {
       if (!resp) return;
       var pushUrl = el.getAttribute("hx-push-url");
       if (pushUrl) {

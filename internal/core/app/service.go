@@ -67,7 +67,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		in.MaxIterations = 50000
 	}
 	if in.TimeoutSec <= 0 {
-		in.TimeoutSec = 30
+		in.TimeoutSec = 120
 	}
 
 	data, err := s.inputRepo.LoadInput(ctx)
