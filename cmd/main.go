@@ -9,12 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KolManis/uni-scheduler/internal/infrastructure/postgres"
-	repo "github.com/KolManis/uni-scheduler/internal/repository/postgres"
-	httpTransport "github.com/KolManis/uni-scheduler/internal/transport/http"
-	"github.com/KolManis/uni-scheduler/internal/transport/http/handlers"
-	"github.com/KolManis/uni-scheduler/internal/transport/http/web"
-	"github.com/KolManis/uni-scheduler/internal/usecase/generator"
+	httpTransport "github.com/KolManis/uni-scheduler/internal/adapters/in/http"
+	"github.com/KolManis/uni-scheduler/internal/adapters/in/http/rest"
+	"github.com/KolManis/uni-scheduler/internal/adapters/in/http/web"
+	"github.com/KolManis/uni-scheduler/internal/adapters/out/postgres"
+	"github.com/KolManis/uni-scheduler/internal/core/app"
 )
 
 func main() {
@@ -41,18 +40,18 @@ func main() {
 	}
 	defer pool.Close()
 
-	inputRepo := repo.NewInputRepository(pool)
-	outputRepo := repo.NewOutputRepository(pool)
-	importRepo := repo.NewImportRepository(pool)
-	refWriteRepo := repo.NewRefWriteRepository(pool)
+	inputRepo := postgres.NewInputRepository(pool)
+	outputRepo := postgres.NewOutputRepository(pool)
+	importRepo := postgres.NewImportRepository(pool)
+	refWriteRepo := postgres.NewRefWriteRepository(pool)
 
-	svc := generator.NewService(inputRepo, outputRepo, importRepo)
+	svc := app.NewService(inputRepo, outputRepo, importRepo)
 
-	scheduleHandler := handlers.NewScheduleHandler(svc)
-	excelHandler := handlers.NewExcelHandler(svc, inputRepo)
-	importHandler := handlers.NewImportHandler(svc)
-	referenceHandler := handlers.NewReferenceHandler(inputRepo)
-	refWriteHandler := handlers.NewRefWriteHandler(refWriteRepo)
+	scheduleHandler := rest.NewScheduleHandler(svc)
+	excelHandler := rest.NewExcelHandler(svc, inputRepo)
+	importHandler := rest.NewImportHandler(svc)
+	referenceHandler := rest.NewReferenceHandler(inputRepo)
+	refWriteHandler := rest.NewRefWriteHandler(refWriteRepo)
 	webHandler := web.NewHandler(inputRepo, refWriteRepo, svc)
 
 	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler, refWriteHandler, webHandler)

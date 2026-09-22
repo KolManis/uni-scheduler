@@ -1,2 +1,0 @@
-// HardConstraint, SoftConstraint
-package constraints

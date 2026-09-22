@@ -1,0 +1,117 @@
+package solver
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/KolManis/uni-scheduler/internal/core/domain"
+)
+
+// Эталонные тесты фиксируют ТОЧНОЕ поведение детерминированных частей солвера — штрафной
+// функции и сходимости операторов. Нужны как страховка при рефакторинге: инварианты
+// (нет накладок, score не хуже) изменение алгоритма пропустят, а эти — нет.
+//
+// Если эталон разошёлся после намеренного изменения алгоритма — пересчитать ожидаемые
+// значения и объяснить в коммите, почему поведение поменялось.
+
+// goldenAssignments — вход, в котором есть всё, что штрафует функция качества: окна у групп
+// и преподавателей, суббота, переход между корпусами вплотную, чётность, «форточка».
+func goldenAssignments() []domain.Assignment {
+	mk := func(group, teacher, room, building string, day domain.Day, pair int, p domain.Parity) domain.Assignment {
+		return domain.Assignment{
+			GroupIDs:   []string{group},
+			TeacherID:  teacher,
+			RoomID:     room,
+			SubjectID:  "S-" + group + "-" + teacher,
+			Type:       domain.Practice,
+			TimeSlot:   domain.MustNewTimeSlot(day, pair),
+			Parity:     p,
+			BuildingID: building,
+		}
+	}
+	return []domain.Assignment{
+		// G1: окно на 2-й паре в понедельник, переход в другой корпус вплотную во вторник
+		mk("G1", "T1", "R1", "A", domain.Monday, 1, domain.Always),
+		mk("G1", "T2", "R2", "A", domain.Monday, 3, domain.Always),
+		mk("G1", "T1", "R1", "A", domain.Tuesday, 1, domain.Always),
+		mk("G1", "T3", "R9", "B", domain.Tuesday, 2, domain.Always),
+		// G2: одна пара в субботу, «форточка» в среду
+		mk("G2", "T2", "R2", "A", domain.Saturday, 1, domain.Always),
+		mk("G2", "T3", "R3", "A", domain.Wednesday, 4, domain.Always),
+		mk("G2", "T1", "R1", "A", domain.Thursday, 2, domain.Always),
+		mk("G2", "T1", "R1", "A", domain.Thursday, 5, domain.Always),
+		// G3: разделение по чётности в одном слоте — законно
+		mk("G3", "T2", "R2", "A", domain.Friday, 2, domain.Odd),
+		mk("G3", "T3", "R3", "A", domain.Friday, 2, domain.Even),
+		mk("G3", "T3", "R3", "A", domain.Friday, 4, domain.Always),
+	}
+}
+
+// renderSchedule — компактное каноническое представление: порядок не зависит от
+// порядка в слайсе, поэтому сравнивается само расписание, а не его внутреннее устройство.
+func renderSchedule(assignments []domain.Assignment) string {
+	lines := make([]string, 0, len(assignments))
+	for _, a := range assignments {
+		lines = append(lines, fmt.Sprintf("%s|%s|%s|%d|%s",
+			strings.Join(a.GroupIDs, ","), a.TeacherID, a.TimeSlot.Day(), a.TimeSlot.PairNum(), a.Parity))
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
+}
+
+func TestGolden_FitnessBreakdown(t *testing.T) {
+	// 4 окна у групп: G1 пн 1–3, G2 чт 2–5 (два), G3 пт 2–4.
+	// Суббота: 200 за сам факт + 8000 за единственную пару у G2 в этот день.
+	want := domain.FitnessBreakdown{
+		Saturday:             8200,
+		GroupDayOverload:     0,
+		GroupLongDay:         0,
+		GroupTooFewDays:      200,
+		TeacherDayOverload:   0,
+		TeacherConcentration: 0,
+		GroupGaps:            40000,
+		TeacherGaps:          180,
+		BuildingTransitions:  2000,
+		SingleClassDay:       50,
+	}
+
+	got := CalculateFitnessBreakdown(goldenAssignments(), domain.InputData{})
+
+	if got != want {
+		t.Errorf("разбивка штрафа изменилась\nполучено: %+v\nожидалось: %+v", got, want)
+	}
+	if got.Total() != 50630 {
+		t.Errorf("итоговый штраф: получено %d, ожидалось 50630", got.Total())
+	}
+}
+
+func TestGolden_Converge(t *testing.T) {
+	want := strings.Join([]string{
+		"G1|T1|tuesday|1|always",
+		"G1|T1|tuesday|2|always",
+		"G1|T2|friday|4|always",
+		"G1|T3|monday|1|always",
+		"G2|T1|friday|2|always",
+		"G2|T1|thursday|5|always",
+		"G2|T2|wednesday|3|always",
+		"G2|T3|wednesday|4|always",
+		"G3|T2|friday|3|odd",
+		"G3|T3|friday|1|always",
+		"G3|T3|friday|2|even",
+	}, "\n")
+
+	got := converge(goldenAssignments(), domain.InputData{}, time.Now().Add(10*time.Second), nil)
+
+	if gotRender := renderSchedule(got); gotRender != want {
+		t.Errorf("результат сходимости изменился\nполучено:\n%s\n\nожидалось:\n%s", gotRender, want)
+	}
+	if score := calculateFitness(got, domain.InputData{}); score != 100 {
+		t.Errorf("штраф после сходимости: получено %d, ожидалось 100", score)
+	}
+	if !checkHardConstraints(got, nil) {
+		t.Error("сходимость нарушила жёсткие ограничения")
+	}
+}
