@@ -6,7 +6,7 @@
 
 <div class="card" style="margin-bottom:24px;">
   <h2>Сгенерировать новое расписание</h2>
-  <form hx-post="/ui/schedules/generate" hx-target="#main" hx-pending-text="Генерируется… (до 2 мин)">
+  <form hx-post="/ui/schedules/generate" hx-target="#main" hx-pending-text="Генерируется… (до 2 мин, все методы параллельно)">
     <div class="form-row">
       <div class="field">
         <label>Название</label>
@@ -38,10 +38,21 @@
       <div class="field">
         <label>Метод улучшения</label>
         <select name="improve_algo">
-          <option value="hillclimb">Iterated local search (по умолчанию)</option>
+          <option value="all">Все методы — сравнить (рекомендуется)</option>
+          <option value="hillclimb">Iterated local search</option>
           <option value="sa">Имитация отжига (SA)</option>
           <option value="tabu">Табу-поиск</option>
           <option value="ga">Генетический алгоритм</option>
+          <option value="lns">Разрушение-восстановление (LNS)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Параллельных стартов</label>
+        <select name="parallel_starts">
+          <option value="1">1 (быстро)</option>
+          <option value="3">3</option>
+          <option value="5">5 (рекомендуется)</option>
+          <option value="8">8</option>
         </select>
       </div>
     </div>

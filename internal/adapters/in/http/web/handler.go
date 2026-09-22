@@ -44,6 +44,7 @@ type refWriter interface {
 
 type scheduleService interface {
 	Generate(ctx context.Context, in app.GenerateInput) (*domain.Schedule, error)
+	GenerateAllMethods(ctx context.Context, in app.GenerateInput) ([]*domain.Schedule, error)
 	GetByID(ctx context.Context, id int64) (*domain.Schedule, error)
 	List(ctx context.Context) ([]domain.ScheduleSummary, error)
 	Breakdown(sched *domain.Schedule) domain.FitnessBreakdown

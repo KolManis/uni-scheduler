@@ -23,7 +23,8 @@ type GenerateInput struct {
 	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
 	// "second" → исключить планы с semester_half="first" (2-я половина, лекции закончились)
 	// "" / "full" → всё без фильтрации (по умолчанию)
-	ImproveAlgo string // "hillclimb" (default) | "sa" | "tabu" | "ga"
+	ImproveAlgo    string // "hillclimb" (default) | "sa" | "tabu" | "ga" | "lns"
+	ParallelStarts int    // 0/1 — один запуск (по умолчанию), N>1 — многостартовый параллельный поиск
 }
 
 // PatchRequest — запрос на изменение одного назначения.
@@ -106,7 +107,12 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		case "subject":
 			result, solveErr = solver.SolveParallel(*data, in.MaxIterations, 4)
 		default:
-			result, solveErr = solver.SolveTeacher(*data, in.MaxIterations, improve)
+			starts := in.ParallelStarts
+			if starts <= 1 {
+				result, solveErr = solver.SolveTeacher(*data, in.MaxIterations, improve)
+			} else {
+				result, solveErr = solver.SolveTeacherMultiStart(*data, in.MaxIterations, improve, starts)
+			}
 		}
 		ch <- solveResult{result, solveErr}
 	}()
@@ -126,6 +132,124 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		}
 		return saved, nil
 	}
+}
+
+// GenerateAllMethods запускает все пять улучшающих алгоритмов параллельно и сохраняет
+// пять расписаний с суффиксами имени. Каждая горутина строит своё расписание с нуля
+// (общего состояния нет), поэтому они не мешают друг другу; вычисляется fitness по
+// одному и тому же критерию, так что результаты сравнимы.
+//
+// Смысл — дать возможность увидеть, какой метод даёт лучшее решение на конкретных
+// данных: разброс между методами велик и стохастичен, «победитель» плавает от прогона
+// к прогону. Пользователь сам смотрит список и выбирает наилучший.
+//
+// Общий таймаут применяется ко ВСЕМ пяти прогонам: если задан 120 сек, каждый метод
+// имеет 120 сек, а горутины идут параллельно — весь вызов уложится в те же 120 сек.
+func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*domain.Schedule, error) {
+	if in.Name == "" {
+		in.Name = "Untitled"
+	}
+	if in.MaxIterations <= 0 {
+		in.MaxIterations = 50000
+	}
+	if in.TimeoutSec <= 0 {
+		in.TimeoutSec = 120
+	}
+
+	data, err := s.inputRepo.LoadInput(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load input: %w", err)
+	}
+	if in.SemesterHalf == domain.HalfSecond {
+		filtered := data.SubjectPlans[:0]
+		for _, sp := range data.SubjectPlans {
+			if sp.SemesterHalf != domain.HalfFirst {
+				filtered = append(filtered, sp)
+			}
+		}
+		data.SubjectPlans = filtered
+	}
+
+	solveCtx, cancel := context.WithTimeout(ctx, time.Duration(in.TimeoutSec)*time.Second)
+	defer cancel()
+
+	methods := []struct {
+		algo   solver.ImproveAlgorithm
+		suffix string
+	}{
+		{solver.ImproveHillClimb, "hillclimb"},
+		{solver.ImproveSimulatedAnnealing, "SA"},
+		{solver.ImproveTabuSearch, "tabu"},
+		{solver.ImproveGeneticAlgorithm, "GA"},
+		{solver.ImproveLNS, "LNS"},
+	}
+
+	type genResult struct {
+		sched *domain.Schedule
+		err   error
+	}
+	results := make([]genResult, len(methods))
+	done := make(chan int, len(methods))
+
+	for i, m := range methods {
+		go func(idx int, algo solver.ImproveAlgorithm, suffix string) {
+			var sched *domain.Schedule
+			var solveErr error
+			starts := in.ParallelStarts
+			if starts <= 1 {
+				sched, solveErr = solver.SolveTeacher(*data, in.MaxIterations, algo)
+			} else {
+				sched, solveErr = solver.SolveTeacherMultiStart(*data, in.MaxIterations, algo, starts)
+			}
+			results[idx] = genResult{sched: sched, err: solveErr}
+			done <- idx
+		}(i, m.algo, m.suffix)
+	}
+
+	// Ждём завершения всех горутин ЛИБО общего таймаута.
+	completed := 0
+	for completed < len(methods) {
+		select {
+		case <-solveCtx.Done():
+			// Дождёмся уже запущенных горутин снаружи цикла: они всё равно допишут в results.
+			// Но мы прекращаем ждать новых — то, что успело, то и сохраним.
+			completed = len(methods)
+		case <-done:
+			completed++
+		}
+	}
+
+	// Сохраняем всё, что успело сойтись.
+	var saved []*domain.Schedule
+	var firstErr error
+	for i, r := range results {
+		if r.err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: %w", methods[i].suffix, r.err)
+			}
+			continue
+		}
+		if r.sched == nil {
+			continue // горутина не успела до таймаута
+		}
+		r.sched.Name = in.Name + " — " + methods[i].suffix
+		r.sched.Unplaced = solver.ComputeUnplaced(r.sched.Assignments, *data)
+		out, err := s.outputRepo.SaveSchedule(ctx, r.sched)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("save %s: %w", methods[i].suffix, err)
+			}
+			continue
+		}
+		saved = append(saved, out)
+	}
+	if len(saved) == 0 {
+		if firstErr != nil {
+			return nil, firstErr
+		}
+		return nil, fmt.Errorf("no method finished within %ds", in.TimeoutSec)
+	}
+	return saved, nil
 }
 
 // GetByID возвращает расписание по ID.

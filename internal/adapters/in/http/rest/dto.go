@@ -9,7 +9,8 @@ type GenerateRequest struct {
 	SolverType    string              `json:"solver_type"` // "teacher" | "subject"
 	TimeoutSec    int                 `json:"timeout_sec"`
 	SemesterHalf  domain.SemesterHalf `json:"semester_half"` // "" | "first" | "second"
-	ImproveAlgo   string              `json:"improve_algo"`  // "hillclimb" | "sa" | "tabu" | "ga"
+	ImproveAlgo    string              `json:"improve_algo"`    // "hillclimb" | "sa" | "tabu" | "ga" | "lns"
+	ParallelStarts int                 `json:"parallel_starts"` // 0/1 — один запуск, N>1 — многостартовый
 }
 
 // PatchAssignmentRequest — тело PATCH /schedules/{id}/assignments/{idx}.

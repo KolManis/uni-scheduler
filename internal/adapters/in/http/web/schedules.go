@@ -215,12 +215,42 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := app.GenerateInput{
-		Name:         r.FormValue("name"),
-		SolverType:   r.FormValue("solver_type"),
-		TimeoutSec:   atoi(r.FormValue("timeout_sec"), 30),
-		SemesterHalf: domain.SemesterHalf(r.FormValue("semester_half")),
-		ImproveAlgo:  r.FormValue("improve_algo"),
+		Name:           r.FormValue("name"),
+		SolverType:     r.FormValue("solver_type"),
+		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 30),
+		SemesterHalf:   domain.SemesterHalf(r.FormValue("semester_half")),
+		ImproveAlgo:    r.FormValue("improve_algo"),
+		ParallelStarts: atoi(r.FormValue("parallel_starts"), 1),
 	}
+
+	// Специальное значение "all" — запускаем ВСЕ методы параллельно, сохраняем каждый
+	// как отдельное расписание. Пользователь потом сравнивает их в списке.
+	if in.ImproveAlgo == "all" {
+		saved, err := h.svc.GenerateAllMethods(r.Context(), in)
+		if err != nil {
+			h.loadSchedulesList(w, r, http.StatusUnprocessableEntity, "Не удалось сгенерировать все методы: "+err.Error())
+			return
+		}
+		list, err := h.svc.List(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		var bestScore int
+		for i, s := range saved {
+			if i == 0 || s.Score < bestScore {
+				bestScore = s.Score
+			}
+		}
+		successMsg := fmt.Sprintf("Сгенерировано %d расписаний (по методам). Лучший score: %d — сравните и выберите",
+			len(saved), bestScore)
+		renderStatus(w, r, http.StatusOK, h.pages["schedules_list.html"], schedulesListData{
+			Schedules: list,
+			Success:   successMsg,
+		})
+		return
+	}
+
 	sched, err := h.svc.Generate(r.Context(), in)
 	if err != nil {
 		h.loadSchedulesList(w, r, http.StatusUnprocessableEntity, "Не удалось сгенерировать расписание: "+err.Error())

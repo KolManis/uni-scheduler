@@ -45,7 +45,8 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		SolverType:    req.SolverType,
 		TimeoutSec:    req.TimeoutSec,
 		SemesterHalf:  req.SemesterHalf,
-		ImproveAlgo:   req.ImproveAlgo,
+		ImproveAlgo:    req.ImproveAlgo,
+		ParallelStarts: req.ParallelStarts,
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrNoSolution) {
