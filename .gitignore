@@ -1,6 +1,7 @@
 # Compiled binary
 main.exe
 *.exe
+bin/
 
 # Temp Excel lock files
 ~$*
@@ -10,3 +11,8 @@ C\3*
 
 # Go build cache (if any)
 vendor/
+
+# Локальные рабочие заметки и резервные копии — не для репозитория
+CLAUDE.md
+docs/harness-engineering-guide.md
+.diploma_backup_*/
