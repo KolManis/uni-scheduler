@@ -2,6 +2,7 @@ package solver
 
 import (
 	"log/slog"
+	"math/rand"
 	"sort"
 
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
@@ -58,13 +59,37 @@ func newTeacherState(input domain.InputData) *teacherState {
 // недоступных слотов = ниже гибкость = раньше в очереди. Разбиение состава на подпотоки
 // запрещено — см. placeGroupsSplit.
 func SolveTeacher(input domain.InputData, maxIter int, improve ImproveAlgorithm) (*domain.Schedule, error) {
+	return SolveTeacherWithSeed(input, maxIter, improve, 0)
+}
+
+// SolveTeacherWithSeed — то же, что SolveTeacher, но со случайным зерном для
+// многостартового поиска (SolveTeacherMultiStart). seed == 0 — детерминированное
+// построение (полный аналог поведения SolveTeacher до многостартовости).
+// Ненулевой seed перемешивает преподавателей и предметы В ПРЕДЕЛАХ одной и той же
+// приоритетной группы: расписания получаются разные, но общая стратегия сохраняется —
+// жёсткие всё равно идут раньше гибких, потоковые лекции — раньше одиночных.
+func SolveTeacherWithSeed(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64) (*domain.Schedule, error) {
 	state := newTeacherState(input)
 
+	var rng *rand.Rand
+	if seed != 0 {
+		rng = rand.New(rand.NewSource(seed))
+	}
+
 	teachers := orderTeachersByFlexibility(state)
+	if rng != nil {
+		shuffleWithinBuckets(teachers, rng, func(t domain.Teacher) float64 {
+			return teacherFlexibility(state, t)
+		})
+	}
 
 	for _, t := range teachers {
 		state.logger.Info("processing teacher", "id", t.ID, "name", t.Name, "max_hours", t.MaxWeeklyHours)
-		for _, task := range collectRemaining(state, input, t) {
+		tasks := collectRemaining(state, input, t)
+		if rng != nil {
+			shuffleTasksWithinPriority(tasks, rng)
+		}
+		for _, task := range tasks {
 			placeTask(state, task)
 		}
 	}
@@ -405,38 +430,79 @@ type placementTask struct {
 // Значение < 1 — преподаватель ограничен физически (у него меньше свободных пар, чем нагрузка).
 // При равной гибкости — вперёд идут те, у кого больше предметов (сложнее собрать расписание).
 func orderTeachersByFlexibility(state *teacherState) []domain.Teacher {
-	const totalSlots = 36 // 6 дней × 6 пар
-
 	teachers := make([]domain.Teacher, len(state.input.Teachers))
 	copy(teachers, state.input.Teachers)
 
 	subjectCount := make(map[string]int)
-	neededHours := make(map[string]int)
 	for _, sp := range state.input.SubjectPlans {
 		subjectCount[sp.TeacherID]++
-		neededHours[sp.TeacherID] += sp.LectureHours + sp.PracticeHours + sp.LabHours
-	}
-
-	flexibility := func(t domain.Teacher) float64 {
-		need := neededHours[t.ID]
-		if need <= 0 {
-			return 1e9 // без нагрузки — максимально гибкий, в конец
-		}
-		available := totalSlots - len(t.UnavailableSlots)
-		if available <= 0 {
-			return 0
-		}
-		return float64(available) / float64(need)
 	}
 
 	sort.Slice(teachers, func(i, j int) bool {
-		fi, fj := flexibility(teachers[i]), flexibility(teachers[j])
+		fi, fj := teacherFlexibility(state, teachers[i]), teacherFlexibility(state, teachers[j])
 		if fi != fj {
 			return fi < fj
 		}
 		return subjectCount[teachers[i].ID] > subjectCount[teachers[j].ID]
 	})
 	return teachers
+}
+
+// teacherFlexibility — доступных пар в неделю на один нужный час. Меньше = жёстче.
+// Используется и в основной сортировке, и в bucketing для случайных перемешиваний.
+func teacherFlexibility(state *teacherState, t domain.Teacher) float64 {
+	const totalSlots = 36 // 6 дней × 6 пар
+
+	need := 0
+	for _, sp := range state.input.SubjectPlans {
+		if sp.TeacherID == t.ID {
+			need += sp.LectureHours + sp.PracticeHours + sp.LabHours
+		}
+	}
+	if need <= 0 {
+		return 1e9 // без нагрузки — максимально гибкий, в конец
+	}
+	available := totalSlots - len(t.UnavailableSlots)
+	if available <= 0 {
+		return 0
+	}
+	return float64(available) / float64(need)
+}
+
+// shuffleWithinBuckets перемешивает элементы уже отсортированного слайса, но только
+// внутри непрерывных участков, где ключ одинаковый. Это ломает произвольный tie-break,
+// не нарушая доминирующий порядок.
+func shuffleWithinBuckets[T any](items []T, rng *rand.Rand, key func(T) float64) {
+	i := 0
+	for i < len(items) {
+		j := i + 1
+		for j < len(items) && key(items[j]) == key(items[i]) {
+			j++
+		}
+		if j-i > 1 {
+			bucket := items[i:j]
+			rng.Shuffle(len(bucket), func(a, b int) { bucket[a], bucket[b] = bucket[b], bucket[a] })
+		}
+		i = j
+	}
+}
+
+// shuffleTasksWithinPriority перемешивает задачи одного класса и близких приоритетов.
+// Порядок «лекции первыми, потом практики, потом лабы» сохраняется — рандомизация только
+// в пределах одного classType между разными предметами.
+func shuffleTasksWithinPriority(tasks []placementTask, rng *rand.Rand) {
+	i := 0
+	for i < len(tasks) {
+		j := i + 1
+		for j < len(tasks) && tasks[j].classType == tasks[i].classType {
+			j++
+		}
+		if j-i > 1 {
+			bucket := tasks[i:j]
+			rng.Shuffle(len(bucket), func(a, b int) { bucket[a], bucket[b] = bucket[b], bucket[a] })
+		}
+		i = j
+	}
 }
 
 // collectRemaining — пары этого преподавателя, которые ещё не поставлены. Порядок:

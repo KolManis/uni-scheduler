@@ -54,6 +54,7 @@ const (
 	ImproveSimulatedAnnealing ImproveAlgorithm = "sa"        // имитация отжига: принимает ухудшающие ходы с падающей вероятностью
 	ImproveTabuSearch         ImproveAlgorithm = "tabu"      // табу-поиск: избегает недавних ходов через память
 	ImproveGeneticAlgorithm   ImproveAlgorithm = "ga"        // генетический: популяция расписаний с кроссовером
+	ImproveLNS                ImproveAlgorithm = "lns"       // large neighborhood search: разрушение-восстановление
 )
 
 // LocalSearch улучшает расписание в два этапа, уложившись в localSearchTotalBudget суммарно:
@@ -74,6 +75,8 @@ func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo I
 		current = tabuSearch(current, input, deadline, unavail)
 	case ImproveGeneticAlgorithm:
 		current = geneticAlgorithm(current, input, deadline, unavail)
+	case ImproveLNS:
+		current = largeNeighborhoodSearch(current, input, deadline, unavail)
 	default: // ImproveHillClimb или пусто
 		current = iteratedLocalSearch(current, input, deadline, unavail)
 	}
