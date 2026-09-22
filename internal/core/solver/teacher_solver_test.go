@@ -78,11 +78,11 @@ func TestSolveTeacher_NoSaturday(t *testing.T) {
 	}
 }
 
-// TestPlaceGroupsSplit_FallsBackWhenNoCommonSlot проверяет сценарий из реального datasets:
-// у большого потока (несколько групп) нет ни одного общего свободного окна на всех сразу,
-// но у каждой группы по отдельности такое окно есть — placeGroupsSplit должен развести их
-// по разным слотам вместо того, чтобы просто сдаться.
-func TestPlaceGroupsSplit_FallsBackWhenNoCommonSlot(t *testing.T) {
+// TestPlaceGroupsSplit_KeepsGroupsTogether проверяет, что одну и ту же пару нельзя провести
+// разным подпотокам в разное время: если общего свободного окна на весь состав нет, занятие
+// уходит в unplaced целиком. Раньше состав дробился пополам, но это давало некорректные
+// расписания — одну лекцию читают потоку раз, а не N раз каждой половине.
+func TestPlaceGroupsSplit_KeepsGroupsTogether(t *testing.T) {
 	input := domain.InputData{
 		Groups: []domain.Group{
 			{ID: "G1", StudentCount: 20},
@@ -120,25 +120,11 @@ func TestPlaceGroupsSplit_FallsBackWhenNoCommonSlot(t *testing.T) {
 	}
 
 	ok := placeGroupsSplit(state, subject, domain.Practice, teacher, domain.Always, subject.GroupIDs)
-	if !ok {
-		t.Fatal("expected placement to succeed via split even without a common slot")
+	if ok {
+		t.Fatal("expected placement to fail: no common slot on all groups, splitting is not allowed")
 	}
-	if len(state.assignments) != 2 {
-		t.Fatalf("expected 2 assignments (one per group), got %d: %+v", len(state.assignments), state.assignments)
-	}
-
-	seen := map[string]domain.TimeSlot{}
-	for _, a := range state.assignments {
-		if len(a.GroupIDs) != 1 {
-			t.Fatalf("expected each split assignment to cover exactly one group, got %+v", a.GroupIDs)
-		}
-		seen[a.GroupIDs[0]] = a.TimeSlot
-	}
-	if seen["G1"] != freeSlotG1 {
-		t.Errorf("G1 expected at %+v, got %+v", freeSlotG1, seen["G1"])
-	}
-	if seen["G2"] != freeSlotG2 {
-		t.Errorf("G2 expected at %+v, got %+v", freeSlotG2, seen["G2"])
+	if len(state.assignments) != 0 {
+		t.Fatalf("expected 0 assignments (subject should stay unplaced), got %d: %+v", len(state.assignments), state.assignments)
 	}
 }
 

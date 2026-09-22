@@ -49,59 +49,26 @@ func newTeacherState(input domain.InputData) *teacherState {
 	}
 }
 
-// SolveTeacher — teacher-driven подход
+// SolveTeacher — teacher-driven подход: преподаватели идут от самых «жёстких» к самым
+// «гибким», их занятия ставятся подряд (компактный дневной график). Внутри преподавателя
+// предметы сортируются так, чтобы потоковые лекции (широкий состав, много часов) шли
+// первыми — им сложнее всего найти общее окно, поэтому им нужен первый выбор.
+//
+// Гибкость = (свободных пар в неделю) / (нужных часов). Мало пар в неделю и/или много
+// недоступных слотов = ниже гибкость = раньше в очереди. Разбиение состава на подпотоки
+// запрещено — см. placeGroupsSplit.
 func SolveTeacher(input domain.InputData, maxIter int) (*domain.Schedule, error) {
 	state := newTeacherState(input)
 
-	// Сортируем преподавателей по сложности
-	teachers := orderTeachersByComplexity(state)
+	teachers := orderTeachersByFlexibility(state)
 
-	for _, teacher := range teachers {
-		state.logger.Info("processing teacher", "id", teacher.ID, "name", teacher.Name, "max_hours", teacher.MaxWeeklyHours)
-
-		// Получаем все предметы этого преподавателя
-		subjects := getSubjectsForTeacher(input, teacher.ID)
-
-		// Сортируем предметы
-		sortSubjectsByPriority(subjects)
-
-		// Генерируем слоты для каждого предмета с учётом чётности
-		for _, subject := range subjects {
-			if !subjectRemainingTeacher(state, subject) {
-				continue
-			}
-
-			// Обрабатываем каждый тип занятий отдельно
-			for _, classType := range []domain.ClassType{domain.Lecture, domain.Practice, domain.Lab} {
-				remaining := getRemainingHours(state, subject, classType)
-				if remaining <= 0 {
-					continue
-				}
-
-				// Для каждого часа (пары) ищем слот
-				for hoursPlaced := 0; hoursPlaced < remaining; hoursPlaced += 2 {
-					// Определяем чётность для этого конкретного занятия
-					parity := subject.Parity
-					if parity == "" {
-						parity = domain.Always
-					}
-
-					// Пытаемся поставить всех сразу; если общего окна на все группы нет —
-					// делим состав пополам и ищем слот для каждой половины отдельно
-					// (тот же преподаватель, но, возможно, разное время/аудитория).
-					if !placeGroupsSplit(state, subject, classType, teacher, parity, subject.GroupIDs) {
-						state.logger.Warn("cannot place subject (even after splitting groups)",
-							"subject", subject.ID,
-							"type", classType,
-							"parity", parity,
-							"teacher", teacher.ID)
-					}
-				}
-			}
+	for _, t := range teachers {
+		state.logger.Info("processing teacher", "id", t.ID, "name", t.Name, "max_hours", t.MaxWeeklyHours)
+		for _, task := range collectRemaining(state, input, t) {
+			placeTask(state, task)
 		}
 	}
 
-	// Проверяем, все ли предметы распределены
 	if !allSubjectsPlacedTeacher(state) {
 		state.logger.Warn("not all subjects placed, using fallback solver")
 		return fallbackSolve(state)
@@ -122,27 +89,19 @@ func SolveTeacher(input domain.InputData, maxIter int) (*domain.Schedule, error)
 	}, nil
 }
 
-// placeGroupsSplit пытается поставить занятие сразу для всех groupIDs. Если общего окна на весь
-// состав нет, а групп больше одной — делит их пополам и рекурсивно пробует для каждой половины
-// независимо (тот же преподаватель/предмет, но, возможно, разное время и аудитория). Это отражает
-// реальную практику: поток из многих групп на факультатив/физкультуру/психологию можно развести
-// по разным окнам недели, если общего окна на всех сразу не находится.
+// placeGroupsSplit ставит занятие сразу для всех groupIDs одной парой. Если общего окна на весь
+// состав нет — занятие уходит в unplaced. Раньше здесь состав делился пополам и ставился разными
+// парами, но это было некорректно: одну и ту же лекцию/практику нельзя проводить дважды
+// (потоковую лекцию читают одному потоку, практика по учебному плану — единое занятие).
 func placeGroupsSplit(state *teacherState, subject domain.SubjectPlan, classType domain.ClassType,
 	teacher domain.Teacher, parity domain.Parity, groupIDs []string) bool {
 
 	slot, room, found := findBestSlot(state, subject, classType, teacher, parity, groupIDs)
-	if found {
-		assignTeacherSubject(state, subject, classType, *slot, room, parity, groupIDs)
-		return true
-	}
-	if len(groupIDs) <= 1 {
+	if !found {
 		return false
 	}
-
-	mid := len(groupIDs) / 2
-	leftOK := placeGroupsSplit(state, subject, classType, teacher, parity, groupIDs[:mid])
-	rightOK := placeGroupsSplit(state, subject, classType, teacher, parity, groupIDs[mid:])
-	return leftOK && rightOK
+	assignTeacherSubject(state, subject, classType, *slot, room, parity, groupIDs)
+	return true
 }
 
 // findBestSlot — ищет лучший слот для занятия с day-aware выбором (без окон).
@@ -433,23 +392,93 @@ func findBestRoom(state *teacherState, subject domain.SubjectPlan, slot domain.T
 	return best
 }
 
-// orderTeachersByComplexity — сортировка преподавателей
-func orderTeachersByComplexity(state *teacherState) []domain.Teacher {
+// placementTask — одна пара, которую надо разместить: единица работы для фаз 1–3.
+type placementTask struct {
+	teacher   domain.Teacher
+	subject   domain.SubjectPlan
+	classType domain.ClassType
+	parity    domain.Parity
+}
+
+// orderTeachersByFlexibility — от самых «жёстких» к самым «гибким». Гибкость = сколько
+// пар в неделю преподаватель реально может провести, делённое на сколько ему надо провести.
+// Значение < 1 — преподаватель ограничен физически (у него меньше свободных пар, чем нагрузка).
+// При равной гибкости — вперёд идут те, у кого больше предметов (сложнее собрать расписание).
+func orderTeachersByFlexibility(state *teacherState) []domain.Teacher {
+	const totalSlots = 36 // 6 дней × 6 пар
+
 	teachers := make([]domain.Teacher, len(state.input.Teachers))
 	copy(teachers, state.input.Teachers)
 
 	subjectCount := make(map[string]int)
+	neededHours := make(map[string]int)
 	for _, sp := range state.input.SubjectPlans {
 		subjectCount[sp.TeacherID]++
+		neededHours[sp.TeacherID] += sp.LectureHours + sp.PracticeHours + sp.LabHours
+	}
+
+	flexibility := func(t domain.Teacher) float64 {
+		need := neededHours[t.ID]
+		if need <= 0 {
+			return 1e9 // без нагрузки — максимально гибкий, в конец
+		}
+		available := totalSlots - len(t.UnavailableSlots)
+		if available <= 0 {
+			return 0
+		}
+		return float64(available) / float64(need)
 	}
 
 	sort.Slice(teachers, func(i, j int) bool {
-		if teachers[i].MaxWeeklyHours != teachers[j].MaxWeeklyHours {
-			return teachers[i].MaxWeeklyHours < teachers[j].MaxWeeklyHours
+		fi, fj := flexibility(teachers[i]), flexibility(teachers[j])
+		if fi != fj {
+			return fi < fj
 		}
 		return subjectCount[teachers[i].ID] > subjectCount[teachers[j].ID]
 	})
 	return teachers
+}
+
+// collectRemaining — пары этого преподавателя, которые ещё не поставлены. Порядок:
+// одиночные лекции → практики → лабы. Внутри типа — предметы с большим потоком идут раньше.
+func collectRemaining(state *teacherState, input domain.InputData, teacher domain.Teacher) []placementTask {
+	subjects := getSubjectsForTeacher(input, teacher.ID)
+	sortSubjectsByPriority(subjects)
+
+	var tasks []placementTask
+	for _, classType := range []domain.ClassType{domain.Lecture, domain.Practice, domain.Lab} {
+		for _, sp := range subjects {
+			remaining := getRemainingHours(state, sp, classType)
+			if remaining <= 0 {
+				continue
+			}
+			parity := sp.Parity
+			if parity == "" {
+				parity = domain.Always
+			}
+			for h := 0; h < remaining; h += 2 {
+				tasks = append(tasks, placementTask{teacher: teacher, subject: sp, classType: classType, parity: parity})
+			}
+		}
+	}
+	return tasks
+}
+
+// placeTask пытается поставить одну пару. Если общего окна на весь состав нет —
+// пара уходит в unplaced (без дробления, см. placeGroupsSplit).
+func placeTask(state *teacherState, task placementTask) {
+	if getRemainingHours(state, task.subject, task.classType) <= 0 {
+		return
+	}
+	if !placeGroupsSplit(state, task.subject, task.classType, task.teacher, task.parity, task.subject.GroupIDs) {
+		state.logger.Warn("cannot place",
+			"subject", task.subject.ID,
+			"type", task.classType,
+			"parity", task.parity,
+			"teacher", task.teacher.ID,
+			"groups", len(task.subject.GroupIDs),
+		)
+	}
 }
 
 // sortSubjectsByPriority — сортировка предметов
