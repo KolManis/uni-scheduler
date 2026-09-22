@@ -18,9 +18,9 @@ var ErrInvalidInput = errors.New("invalid input")
 type GenerateInput struct {
 	Name          string
 	MaxIterations int
-	SolverType    string                 // "subject" | "teacher" (default)
-	TimeoutSec    int                    // 0 → используется дефолт 30 сек
-	SemesterHalf  schedule.SemesterHalf  // "" | "full" | "first" | "second"
+	SolverType    string                // "subject" | "teacher" (default)
+	TimeoutSec    int                   // 0 → используется дефолт 30 сек
+	SemesterHalf  schedule.SemesterHalf // "" | "full" | "first" | "second"
 	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
 	// "second" → исключить планы с semester_half="first" (2-я половина, лекции закончились)
 	// "" / "full" → всё без фильтрации (по умолчанию)
@@ -35,7 +35,7 @@ type PatchRequest struct {
 
 // ConflictError описывает нарушение жёсткого ограничения при PATCH.
 type ConflictError struct {
-	Type         string `json:"type"`          // "teacher_busy" | "group_busy" | "room_busy"
+	Type         string `json:"type"` // "teacher_busy" | "group_busy" | "room_busy"
 	ResourceID   string `json:"resource_id"`
 	ConflictWith int    `json:"conflict_with"` // индекс конфликтующего assignment
 }
@@ -118,6 +118,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*schedule.Sch
 			return nil, res.err
 		}
 		res.sched.Name = in.Name
+		res.sched.Unplaced = solver.ComputeUnplaced(res.sched.Assignments, *data)
 		saved, err := s.outputRepo.SaveSchedule(ctx, res.sched)
 		if err != nil {
 			return nil, fmt.Errorf("save schedule: %w", err)

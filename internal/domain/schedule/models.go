@@ -109,12 +109,21 @@ type Assignment struct {
 	BuildingID string    `json:"building_id"`
 }
 
+// UnplacedItem описывает часть учебного плана, которую солвер не смог поставить в расписание
+// (не хватило слотов/аудиторий с учётом всех ограничений).
+type UnplacedItem struct {
+	SubjectID    string    `json:"subject_id"`
+	Type         ClassType `json:"type"`
+	MissingHours int       `json:"missing_hours"`
+}
+
 type Schedule struct {
-	ID          int64        `json:"id,omitempty"`
-	Name        string       `json:"name"`
-	Assignments []Assignment `json:"assignments"`
-	Score       int          `json:"score"`
-	CreatedAt   time.Time    `json:"created_at,omitempty"`
+	ID          int64          `json:"id,omitempty"`
+	Name        string         `json:"name"`
+	Assignments []Assignment   `json:"assignments"`
+	Score       int            `json:"score"`
+	Unplaced    []UnplacedItem `json:"unplaced,omitempty"`
+	CreatedAt   time.Time      `json:"created_at,omitempty"`
 }
 
 type InputData struct {

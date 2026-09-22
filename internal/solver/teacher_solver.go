@@ -86,18 +86,16 @@ func SolveTeacher(input schedule.InputData, maxIter int) (*schedule.Schedule, er
 						parity = schedule.Always
 					}
 
-					// Ищем слот
-					slot, room, found := findBestSlot(state, subject, classType, teacher, parity)
-					if !found {
-						state.logger.Warn("cannot place subject",
+					// Пытаемся поставить всех сразу; если общего окна на все группы нет —
+					// делим состав пополам и ищем слот для каждой половины отдельно
+					// (тот же преподаватель, но, возможно, разное время/аудитория).
+					if !placeGroupsSplit(state, subject, classType, teacher, parity, subject.GroupIDs) {
+						state.logger.Warn("cannot place subject (even after splitting groups)",
 							"subject", subject.ID,
 							"type", classType,
 							"parity", parity,
 							"teacher", teacher.ID)
-						continue
 					}
-
-					assignTeacherSubject(state, subject, classType, *slot, room, parity)
 				}
 			}
 		}
@@ -124,12 +122,33 @@ func SolveTeacher(input schedule.InputData, maxIter int) (*schedule.Schedule, er
 	}, nil
 }
 
+// placeGroupsSplit пытается поставить занятие сразу для всех groupIDs. Если общего окна на весь
+// состав нет, а групп больше одной — делит их пополам и рекурсивно пробует для каждой половины
+// независимо (тот же преподаватель/предмет, но, возможно, разное время и аудитория). Это отражает
+// реальную практику: поток из многих групп на факультатив/физкультуру/психологию можно развести
+// по разным окнам недели, если общего окна на всех сразу не находится.
+func placeGroupsSplit(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType,
+	teacher schedule.Teacher, parity schedule.Parity, groupIDs []string) bool {
+
+	slot, room, found := findBestSlot(state, subject, classType, teacher, parity, groupIDs)
+	if found {
+		assignTeacherSubject(state, subject, classType, *slot, room, parity, groupIDs)
+		return true
+	}
+	if len(groupIDs) <= 1 {
+		return false
+	}
+
+	mid := len(groupIDs) / 2
+	leftOK := placeGroupsSplit(state, subject, classType, teacher, parity, groupIDs[:mid])
+	rightOK := placeGroupsSplit(state, subject, classType, teacher, parity, groupIDs[mid:])
+	return leftOK && rightOK
+}
+
 // findBestSlot — ищет лучший слот для занятия с day-aware выбором (без окон).
 // Порядок дней: пн→вт→ср→чт→пт, суббота только если нет альтернатив.
 func findBestSlot(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType,
-	teacher schedule.Teacher, parity schedule.Parity) (*schedule.TimeSlot, *schedule.Room, bool) {
-
-	groupIDs := subject.GroupIDs
+	teacher schedule.Teacher, parity schedule.Parity, groupIDs []string) (*schedule.TimeSlot, *schedule.Room, bool) {
 
 	type candidate struct {
 		slot    schedule.TimeSlot
@@ -447,14 +466,15 @@ func sortSubjectsByPriority(subjects []schedule.SubjectPlan) {
 	})
 }
 
-// assignTeacherSubject — назначение предмета
+// assignTeacherSubject — назначение предмета (groupIDs может быть подмножеством subject.GroupIDs,
+// если поток был поделён на части через placeGroupsSplit).
 func assignTeacherSubject(state *teacherState, subject schedule.SubjectPlan, classType schedule.ClassType,
-	slot schedule.TimeSlot, room *schedule.Room, parity schedule.Parity) {
+	slot schedule.TimeSlot, room *schedule.Room, parity schedule.Parity, groupIDs []string) {
 
 	hours := 2
 
 	assignment := schedule.Assignment{
-		GroupIDs:   subject.GroupIDs,
+		GroupIDs:   groupIDs,
 		TeacherID:  subject.TeacherID,
 		RoomID:     room.ID,
 		SubjectID:  subject.ID,
@@ -471,7 +491,7 @@ func assignTeacherSubject(state *teacherState, subject schedule.SubjectPlan, cla
 	}
 	state.subjectCount[subject.ID][classType] += hours
 
-	for _, gid := range subject.GroupIDs {
+	for _, gid := range groupIDs {
 		if state.occupiedGroups[slot] == nil {
 			state.occupiedGroups[slot] = make(map[string]schedule.Parity)
 		}
@@ -523,13 +543,12 @@ func getRemainingHours(state *teacherState, subject schedule.SubjectPlan, classT
 	return total - current
 }
 
-// subjectRemainingTeacher — проверка остатка.
-// Мультигрупповые практики/лабы не обязательны (могут не влезть в лаб. аудитории).
+// subjectRemainingTeacher — проверка остатка: пробовать ли ещё ставить этот предмет.
+// В отличие от allSubjectsPlacedTeacher, здесь мультигрупповые практики/лабы НЕ пропускаются —
+// иначе они вообще ни разу не попадут в findBestSlot/placeGroupsSplit и тихо останутся
+// неразмещёнными, даже не попытавшись разъехаться по разным слотам (см. ComputeUnplaced).
 func subjectRemainingTeacher(state *teacherState, subject schedule.SubjectPlan) bool {
 	for _, ct := range []schedule.ClassType{schedule.Lecture, schedule.Practice, schedule.Lab} {
-		if ct != schedule.Lecture && len(subject.GroupIDs) > 1 {
-			continue
-		}
 		if getRemainingHours(state, subject, ct) > 0 {
 			return true
 		}

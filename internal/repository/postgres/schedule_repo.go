@@ -26,30 +26,35 @@ func (r *OutputRepository) SaveSchedule(ctx context.Context, sched *schedule.Sch
 	if err != nil {
 		return nil, err
 	}
+	unplacedJSON, err := json.Marshal(sched.Unplaced)
+	if err != nil {
+		return nil, err
+	}
 
 	sched.CreatedAt = time.Now().UTC()
 
 	const query = `
-        INSERT INTO schedules (name, assignments, score, created_at)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, name, assignments, score, created_at
+        INSERT INTO schedules (name, assignments, score, unplaced, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, assignments, score, unplaced, created_at
     `
 
-	row := r.pool.QueryRow(ctx, query, sched.Name, assignmentsJSON, sched.Score, sched.CreatedAt)
+	row := r.pool.QueryRow(ctx, query, sched.Name, assignmentsJSON, sched.Score, unplacedJSON, sched.CreatedAt)
 
 	var result schedule.Schedule
-	var data []byte
-	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &result.CreatedAt); err != nil {
+	var data, unplacedData []byte
+	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &unplacedData, &result.CreatedAt); err != nil {
 		return nil, err
 	}
 
 	json.Unmarshal(data, &result.Assignments)
+	json.Unmarshal(unplacedData, &result.Unplaced)
 	return &result, nil
 }
 
 func (r *OutputRepository) GetSchedule(ctx context.Context, id int64) (*schedule.Schedule, error) {
 	const query = `
-        SELECT id, name, assignments, score, created_at
+        SELECT id, name, assignments, score, unplaced, created_at
         FROM schedules
         WHERE id = $1
     `
@@ -57,8 +62,8 @@ func (r *OutputRepository) GetSchedule(ctx context.Context, id int64) (*schedule
 	row := r.pool.QueryRow(ctx, query, id)
 
 	var result schedule.Schedule
-	var data []byte
-	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &result.CreatedAt); err != nil {
+	var data, unplacedData []byte
+	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &unplacedData, &result.CreatedAt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, schedule.ErrNotFound
 		}
@@ -66,22 +71,25 @@ func (r *OutputRepository) GetSchedule(ctx context.Context, id int64) (*schedule
 	}
 
 	json.Unmarshal(data, &result.Assignments)
+	json.Unmarshal(unplacedData, &result.Unplaced)
 	return &result, nil
 }
 
 // ScheduleSummary — расписание без тела assignments (для списка).
 type ScheduleSummary struct {
-	ID         int64     `json:"id"`
-	Name       string    `json:"name"`
-	Score      int       `json:"score"`
-	TotalPairs int       `json:"total_pairs"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID            int64     `json:"id"`
+	Name          string    `json:"name"`
+	Score         int       `json:"score"`
+	TotalPairs    int       `json:"total_pairs"`
+	UnplacedCount int       `json:"unplaced_count"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func (r *OutputRepository) ListSchedules(ctx context.Context) ([]ScheduleSummary, error) {
 	const query = `
         SELECT id, name, score, created_at,
-               jsonb_array_length(assignments) AS total_pairs
+               jsonb_array_length(assignments) AS total_pairs,
+               jsonb_array_length(COALESCE(unplaced, '[]'::jsonb)) AS unplaced_count
         FROM schedules
         ORDER BY score ASC, created_at DESC
         LIMIT 100
@@ -96,7 +104,7 @@ func (r *OutputRepository) ListSchedules(ctx context.Context) ([]ScheduleSummary
 	var list []ScheduleSummary
 	for rows.Next() {
 		var s ScheduleSummary
-		if err := rows.Scan(&s.ID, &s.Name, &s.Score, &s.CreatedAt, &s.TotalPairs); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Score, &s.CreatedAt, &s.TotalPairs, &s.UnplacedCount); err != nil {
 			return nil, err
 		}
 		list = append(list, s)

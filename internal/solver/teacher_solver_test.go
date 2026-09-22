@@ -59,7 +59,7 @@ func TestSolveTeacher_NoHardConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !checkHardConstraints(sched.Assignments) {
+	if !checkHardConstraints(sched.Assignments, nil) {
 		t.Fatal("generated schedule violates hard constraints (HC1-HC3)")
 	}
 }
@@ -75,6 +75,70 @@ func TestSolveTeacher_NoSaturday(t *testing.T) {
 		if a.TimeSlot.Day == schedule.Saturday {
 			t.Logf("warning: pair placed on Saturday (score penalty applied): %+v", a)
 		}
+	}
+}
+
+// TestPlaceGroupsSplit_FallsBackWhenNoCommonSlot проверяет сценарий из реального datasets:
+// у большого потока (несколько групп) нет ни одного общего свободного окна на всех сразу,
+// но у каждой группы по отдельности такое окно есть — placeGroupsSplit должен развести их
+// по разным слотам вместо того, чтобы просто сдаться.
+func TestPlaceGroupsSplit_FallsBackWhenNoCommonSlot(t *testing.T) {
+	input := schedule.InputData{
+		Groups: []schedule.Group{
+			{ID: "G1", StudentCount: 20},
+			{ID: "G2", StudentCount: 20},
+		},
+		Rooms: []schedule.Room{
+			{ID: "R1", Number: "101", BuildingID: "A", Capacity: 30, Type: "lecture"},
+		},
+	}
+	state := newTeacherState(input)
+	teacher := schedule.Teacher{ID: "T1", MaxWeeklyHours: 20}
+	subject := schedule.SubjectPlan{
+		ID: "SP1", TeacherID: "T1", GroupIDs: []string{"G1", "G2"},
+		PracticeHours: 2, RequiresRoomType: "lecture",
+	}
+
+	freeSlotG1 := schedule.TimeSlot{Day: schedule.Tuesday, PairNum: 1}
+	freeSlotG2 := schedule.TimeSlot{Day: schedule.Wednesday, PairNum: 1}
+
+	// Занимаем G1 везде, кроме freeSlotG1; G2 везде, кроме freeSlotG2 —
+	// общего свободного слота на обе группы сразу не остаётся.
+	for _, day := range schedule.AllDays {
+		for pair := 1; pair <= 6; pair++ {
+			slot := schedule.TimeSlot{Day: day, PairNum: pair}
+			if state.occupiedGroups[slot] == nil {
+				state.occupiedGroups[slot] = make(map[string]schedule.Parity)
+			}
+			if slot != freeSlotG1 {
+				state.occupiedGroups[slot]["G1"] = schedule.Always
+			}
+			if slot != freeSlotG2 {
+				state.occupiedGroups[slot]["G2"] = schedule.Always
+			}
+		}
+	}
+
+	ok := placeGroupsSplit(state, subject, schedule.Practice, teacher, schedule.Always, subject.GroupIDs)
+	if !ok {
+		t.Fatal("expected placement to succeed via split even without a common slot")
+	}
+	if len(state.assignments) != 2 {
+		t.Fatalf("expected 2 assignments (one per group), got %d: %+v", len(state.assignments), state.assignments)
+	}
+
+	seen := map[string]schedule.TimeSlot{}
+	for _, a := range state.assignments {
+		if len(a.GroupIDs) != 1 {
+			t.Fatalf("expected each split assignment to cover exactly one group, got %+v", a.GroupIDs)
+		}
+		seen[a.GroupIDs[0]] = a.TimeSlot
+	}
+	if seen["G1"] != freeSlotG1 {
+		t.Errorf("G1 expected at %+v, got %+v", freeSlotG1, seen["G1"])
+	}
+	if seen["G2"] != freeSlotG2 {
+		t.Errorf("G2 expected at %+v, got %+v", freeSlotG2, seen["G2"])
 	}
 }
 

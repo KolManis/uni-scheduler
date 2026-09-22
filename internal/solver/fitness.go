@@ -11,8 +11,35 @@ func CalculateFitness(assignments []schedule.Assignment, input schedule.InputDat
 	return calculateFitness(assignments, input)
 }
 
-func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) int {
-	penalty := 0
+func calculateFitness(assignments []schedule.Assignment, input schedule.InputData) int {
+	return CalculateFitnessBreakdown(assignments, input).Total()
+}
+
+// FitnessBreakdown — расшифровка итогового score по категориям штрафов (см. calculateFitness).
+// Нужна, чтобы объяснить, откуда взялась конкретная цифра score, а не только её значение.
+type FitnessBreakdown struct {
+	Saturday             int // 1: штраф за субботу + одиночная суббота у группы
+	GroupDayOverload     int // 1b: перегрузка дня у группы (4+ / 5+ пар)
+	GroupLongDay         int // 2: длинный день (>4 пар подряд)
+	GroupTooFewDays      int // 3: мало дней при большой нагрузке (группы)
+	TeacherDayOverload   int // 3b: день >2 пар у преподавателя
+	TeacherConcentration int // 3b: <3 активных дней у преподавателя при загрузке
+	GroupGaps            int // 4: окна у групп (дороже всего — 10000 за окно)
+	TeacherGaps          int // 5: окна у преподавателей
+	BuildingTransitions  int // 6: переходы между корпусами вплотную/через окно
+	SingleClassDay       int // 7: "форточка" — всего 1 пара в день у группы
+}
+
+// Total суммирует все категории — должно совпадать с calculateFitness.
+func (b FitnessBreakdown) Total() int {
+	return b.Saturday + b.GroupDayOverload + b.GroupLongDay + b.GroupTooFewDays +
+		b.TeacherDayOverload + b.TeacherConcentration + b.GroupGaps + b.TeacherGaps +
+		b.BuildingTransitions + b.SingleClassDay
+}
+
+// CalculateFitnessBreakdown — та же логика, что calculateFitness, но с разбивкой по категориям.
+func CalculateFitnessBreakdown(assignments []schedule.Assignment, _ schedule.InputData) FitnessBreakdown {
+	var b FitnessBreakdown
 
 	groupSlots := make(map[string]map[schedule.Day][]int)
 	teacherSlots := make(map[string]map[schedule.Day][]int)
@@ -59,7 +86,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 	satGroupCount := make(map[string]int)
 	for _, a := range assignments {
 		if a.TimeSlot.Day == schedule.Saturday {
-			penalty += 200
+			b.Saturday += 200
 			for _, gid := range a.GroupIDs {
 				satGroupCount[gid]++
 			}
@@ -67,7 +94,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 	}
 	for _, cnt := range satGroupCount {
 		if cnt == 1 {
-			penalty += 8000 // одна пара в субботу — нежелательно
+			b.Saturday += 8000 // одна пара в субботу — нежелательно
 		}
 	}
 
@@ -77,9 +104,9 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 			n := len(slots)
 			switch {
 			case n >= 5:
-				penalty += (n-4)*4000 + 2000
+				b.GroupDayOverload += (n-4)*4000 + 2000
 			case n == 4:
-				penalty += 800
+				b.GroupDayOverload += 800
 			}
 		}
 	}
@@ -99,9 +126,9 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 					}
 				}
 				if consecutive >= 4 {
-					penalty += 500
+					b.GroupLongDay += 500
 				} else if len(slots) >= 5 {
-					penalty += 300
+					b.GroupLongDay += 300
 				}
 			}
 		}
@@ -114,9 +141,9 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 			totalPairs += len(slots)
 		}
 		if totalPairs >= 4 && len(daySlots) < 2 {
-			penalty += 600
+			b.GroupTooFewDays += 600
 		} else if totalPairs >= 4 && len(daySlots) < 3 {
-			penalty += 200
+			b.GroupTooFewDays += 200
 		}
 	}
 
@@ -126,7 +153,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 		// Штраф за переполненный день (>2 пар у одного преподавателя)
 		for _, slots := range daySlots {
 			if len(slots) > 2 {
-				penalty += (len(slots) - 2) * 350
+				b.TeacherDayOverload += (len(slots) - 2) * 350
 			}
 		}
 		// Штраф за концентрацию: если кол-во активных дней < 3 при >=4 парах в неделю
@@ -135,7 +162,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 			totalPairs += len(slots)
 		}
 		if totalPairs >= 4 && len(daySlots) < 3 {
-			penalty += (3 - len(daySlots)) * 400
+			b.TeacherConcentration += (3 - len(daySlots)) * 400
 		}
 	}
 
@@ -147,7 +174,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 				copy(sorted, slots)
 				sort.Ints(sorted)
 				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
-				penalty += gaps * 10000
+				b.GroupGaps += gaps * 10000
 			}
 		}
 	}
@@ -160,7 +187,7 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 				copy(sorted, slots)
 				sort.Ints(sorted)
 				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
-				penalty += gaps * 60
+				b.TeacherGaps += gaps * 60
 			}
 		}
 	}
@@ -199,9 +226,9 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 				diff := sorted[i+1] - sorted[i]
 				switch diff {
 				case 1: // вплотную — критичный переход
-					penalty += 2000
+					b.BuildingTransitions += 2000
 				case 2: // через одно окно — есть время добраться
-					penalty += 700
+					b.BuildingTransitions += 700
 				}
 			}
 		}
@@ -211,12 +238,12 @@ func calculateFitness(assignments []schedule.Assignment, _ schedule.InputData) i
 	for _, daySlots := range groupSlots {
 		for _, slots := range daySlots {
 			if len(slots) == 1 {
-				penalty += 25
+				b.SingleClassDay += 25
 			}
 		}
 	}
 
-	return penalty
+	return b
 }
 
 func allSubjectsPlaced(state *solverState) bool {
