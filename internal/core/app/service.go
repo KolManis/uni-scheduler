@@ -25,6 +25,7 @@ type GenerateInput struct {
 	// "" / "full" → всё без фильтрации (по умолчанию)
 	ImproveAlgo    string // "hillclimb" (default) | "sa" | "tabu" | "ga" | "lns"
 	ParallelStarts int    // 0/1 — один запуск (по умолчанию), N>1 — многостартовый параллельный поиск
+	Preferences    domain.SolverPreferences // необязательные правила, по умолчанию выключены
 }
 
 // PatchRequest — запрос на изменение одного назначения.
@@ -110,6 +111,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 	// открыта ли ещё вкладка пользователя. Если пользователь ушёл со страницы,
 	// запрос отменяется, но генерация продолжается на сервере, расписание всё равно
 	// оказывается в БД и появится в списке при следующем открытии.
+	data.Preferences = in.Preferences
 	dataForSolver := *data
 	go func() {
 		var result *domain.Schedule
@@ -132,6 +134,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 			return
 		}
 		result.Name = in.Name
+		result.Options = in.Preferences
 		result.Unplaced = solver.ComputeUnplaced(result.Assignments, dataForSolver)
 		saved, err := s.outputRepo.SaveSchedule(context.Background(), result)
 		if err != nil {
@@ -225,6 +228,7 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	// При «все методы» игнорируем ParallelStarts: 5 методов уже дают 5 параллельных
 	// горутин. Если умножать на 3-8 стартов внутри каждого, получаем 15-40 горутин,
 	// конкурирующих за ~4-8 ядер CPU.
+	data.Preferences = in.Preferences
 	dataForSolver := *data
 	baseName := in.Name
 	for i, m := range methods {
@@ -236,6 +240,7 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 				return
 			}
 			sched.Name = baseName + " — " + suffix
+			sched.Options = in.Preferences
 			sched.Unplaced = solver.ComputeUnplaced(sched.Assignments, dataForSolver)
 			out, err := s.outputRepo.SaveSchedule(context.Background(), sched)
 			if err != nil {
@@ -307,6 +312,7 @@ func (s *Service) List(ctx context.Context) ([]domain.ScheduleSummary, error) {
 // в переходах между корпусами не штрафуются). С пустыми данными разбивка
 // расходилась бы с сохранённым score.
 func (s *Service) Breakdown(sched *domain.Schedule, input domain.InputData) domain.FitnessBreakdown {
+	input.Preferences = sched.Options
 	return solver.CalculateFitnessBreakdown(sched.Assignments, input)
 }
 
@@ -360,6 +366,7 @@ func (s *Service) PatchAssignment(ctx context.Context, schedID int64, idx int, r
 	if err != nil {
 		return nil, fmt.Errorf("load input: %w", err)
 	}
+	data.Preferences = sched.Options
 	sched.Score = solver.CalculateFitness(sched.Assignments, *data)
 
 	if err := s.outputRepo.UpdateSchedule(ctx, sched); err != nil {

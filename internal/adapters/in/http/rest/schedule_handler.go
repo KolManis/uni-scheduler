@@ -47,6 +47,10 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		SemesterHalf:  req.SemesterHalf,
 		ImproveAlgo:    req.ImproveAlgo,
 		ParallelStarts: req.ParallelStarts,
+		Preferences: domain.SolverPreferences{
+			LectureBeforePractice: req.LectureBeforePractice,
+			SameSubjectSameDay:    req.SameSubjectSameDay,
+		},
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrNoSolution) {

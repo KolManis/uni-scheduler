@@ -16,7 +16,7 @@
         <label>Алгоритм</label>
         <select name="solver_type">
           <option value="teacher">teacher-driven (основной)</option>
-          <option value="subject">subject (backtracking, fallback)</option>
+          <option value="subject">subject — устаревший поиск с возвратом, только для сравнения</option>
         </select>
       </div>
     </div>
@@ -56,6 +56,11 @@
         </select>
         <div class="hint">При выборе «Все методы» игнорируется (методы уже идут параллельно).</div>
       </div>
+    </div>
+    <div class="field">
+      <label>Дополнительные правила <span class="muted">(по умолчанию выключены — основной алгоритм)</span></label>
+      <label style="font-weight:normal;"><input type="checkbox" name="lecture_before_practice"> Лекция по предмету раньше практик и лабораторных в неделе</label>
+      <label style="font-weight:normal;"><input type="checkbox" name="same_subject_same_day"> Несколько практик/лабораторных одного предмета — в один день</label>
     </div>
     <button class="btn" type="submit">Сгенерировать</button>
   </form>

@@ -88,7 +88,7 @@ db:
 db-reset:
 	docker compose down -v
 	docker compose up -d --wait postgres
-	@echo DB recreated, migrations 0001/0003/0004 applied.
+	@echo DB recreated, migrations 0001/0003/0004/0005 applied.
 
 seed:
 	$(SEED_CMD)

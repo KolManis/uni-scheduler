@@ -163,8 +163,8 @@ func TestSlotPenalty_PrefersDayWithSinglePair(t *testing.T) {
 				GroupIDs:  []string{"G1"},
 			}
 
-			sameDay := slotPenalty(state, tt.sameDay, subject, subject.GroupIDs, tt.sameDay.Day(), "T2")
-			newDay := slotPenalty(state, tt.newDay, subject, subject.GroupIDs, tt.newDay.Day(), "T2")
+			sameDay := slotPenalty(state, tt.sameDay, subject, domain.Practice, subject.GroupIDs, tt.sameDay.Day(), "T2")
+			newDay := slotPenalty(state, tt.newDay, subject, domain.Practice, subject.GroupIDs, tt.newDay.Day(), "T2")
 			if sameDay >= newDay {
 				t.Errorf("штраф за день с парой (%d) должен быть меньше, чем за новый день (%d)", sameDay, newDay)
 			}

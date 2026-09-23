@@ -60,7 +60,8 @@ Copy-Item deploy\docker-compose.yml, deploy\.env.example, deploy\README.md $out
 # 0002 намеренно не входит: она конфликтует с 0001 (см. docker-compose.yml).
 Copy-Item migrations\0001_init.up.sql, `
           migrations\0003_add_semester_half_and_required_building.up.sql, `
-          migrations\0004_add_unplaced_to_schedules.up.sql (Join-Path $out 'migrations')
+          migrations\0004_add_unplaced_to_schedules.up.sql, `
+          migrations\0005_add_schedule_options.up.sql (Join-Path $out 'migrations')
 Set-Content -Path (Join-Path $out 'VERSION') -Value $version -Encoding ascii
 
 Step 'Архив dist/uni-scheduler.tar.gz'

@@ -23,6 +23,7 @@ services:
       - ./migrations/0001_init.up.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
       - ./migrations/0003_add_semester_half_and_required_building.up.sql:/docker-entrypoint-initdb.d/003_add_semester_half_and_required_building.sql:ro
       - ./migrations/0004_add_unplaced_to_schedules.up.sql:/docker-entrypoint-initdb.d/004_add_unplaced_to_schedules.sql:ro
+      - ./migrations/0005_add_schedule_options.up.sql:/docker-entrypoint-initdb.d/005_add_schedule_options.sql:ro
       - ./seed.sql:/docker-entrypoint-initdb.d/900_seed.sql:ro
 
   app:

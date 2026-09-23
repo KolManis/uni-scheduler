@@ -20,6 +20,7 @@ type teacherState struct {
 	occupiedTeachers map[domain.TimeSlot]map[string]domain.Parity
 	occupiedRooms    map[domain.TimeSlot]map[string]domain.Parity
 	teacherSlots     map[string][]domain.TimeSlot
+	planKeys         map[string]string // id плана → subjectKey, считается один раз
 	logger           *slog.Logger
 }
 
@@ -36,6 +37,10 @@ func newTeacherState(input domain.InputData) *teacherState {
 	for _, r := range input.Rooms {
 		rm[r.ID] = r
 	}
+	pk := make(map[string]string, len(input.SubjectPlans))
+	for _, sp := range input.SubjectPlans {
+		pk[sp.ID] = subjectKey(sp.Name)
+	}
 	return &teacherState{
 		input:            input,
 		teacherMap:       tm,
@@ -47,6 +52,7 @@ func newTeacherState(input domain.InputData) *teacherState {
 		occupiedTeachers: make(map[domain.TimeSlot]map[string]domain.Parity),
 		occupiedRooms:    make(map[domain.TimeSlot]map[string]domain.Parity),
 		teacherSlots:     make(map[string][]domain.TimeSlot),
+		planKeys:         pk,
 		logger:           slog.Default(),
 	}
 }
@@ -187,7 +193,7 @@ func findBestSlot(state *teacherState, subject domain.SubjectPlan, classType dom
 				continue
 			}
 
-			pen := slotPenalty(state, slot, subject, groupIDs, day, teacher.ID)
+			pen := slotPenalty(state, slot, subject, classType, groupIDs, day, teacher.ID)
 
 			for _, room := range state.input.Rooms {
 				if !isRoomSuitable(room, subject.RequiresRoomType) {
@@ -230,7 +236,7 @@ func findBestSlot(state *teacherState, subject domain.SubjectPlan, classType dom
 }
 
 // slotPenalty вычисляет штраф за постановку занятия в slot для групп groupIDs.
-func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.SubjectPlan,
+func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.SubjectPlan, classType domain.ClassType,
 	groupIDs []string, day domain.Day, teacherID string) int {
 
 	satPenalty := 0
@@ -306,7 +312,9 @@ func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.Subje
 	// Глобальный штраф за перегруженный день
 	globalSpread := totalPairsInDay(state, day) * 20
 
-	return satPenalty + gapPenalty*10000 + groupLoadPenalty + teacherSpread + globalSpread + buildingPenalty
+	prefPenalty := preferenceSlotPenalty(state, subject, classType, slot, groupIDs)
+
+	return satPenalty + gapPenalty*10000 + groupLoadPenalty + teacherSpread + globalSpread + buildingPenalty + prefPenalty
 }
 
 // isSportRoomType — спортзал или открытая площадка. Физкультура проходит там, где решит

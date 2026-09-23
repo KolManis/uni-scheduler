@@ -11,6 +11,8 @@ type GenerateRequest struct {
 	SemesterHalf  domain.SemesterHalf `json:"semester_half"` // "" | "first" | "second"
 	ImproveAlgo    string              `json:"improve_algo"`    // "hillclimb" | "sa" | "tabu" | "ga" | "lns"
 	ParallelStarts int                 `json:"parallel_starts"` // 0/1 — один запуск, N>1 — многостартовый
+	LectureBeforePractice bool         `json:"lecture_before_practice"`
+	SameSubjectSameDay    bool         `json:"same_subject_same_day"`
 }
 
 // PatchAssignmentRequest — тело PATCH /schedules/{id}/assignments/{idx}.

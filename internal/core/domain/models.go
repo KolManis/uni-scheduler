@@ -77,6 +77,7 @@ type Schedule struct {
 	Assignments []Assignment   `json:"assignments"`
 	Score       int            `json:"score"`
 	Unplaced    []UnplacedItem `json:"unplaced,omitempty"`
+	Options     SolverPreferences `json:"options"`
 	CreatedAt   time.Time      `json:"created_at,omitempty"`
 }
 
@@ -105,13 +106,15 @@ type FitnessBreakdown struct {
 	TeacherGaps          int // окна у преподавателей
 	BuildingTransitions  int // переходы между корпусами вплотную/через окно
 	SingleClassDay       int // «форточка» — всего 1 пара в день у группы
+	PracticeBeforeLecture int // практика раньше лекции по предмету (если включено)
+	SubjectSpread         int // пары одного плана разнесены по разным дням (если включено)
 }
 
 // Total суммирует все категории — должно совпадать с итоговым score.
 func (b FitnessBreakdown) Total() int {
 	return b.Saturday + b.GroupDayOverload + b.GroupLongDay + b.GroupTooFewDays +
 		b.TeacherDayOverload + b.TeacherConcentration + b.GroupGaps + b.TeacherGaps +
-		b.BuildingTransitions + b.SingleClassDay
+		b.BuildingTransitions + b.SingleClassDay + b.PracticeBeforeLecture + b.SubjectSpread
 }
 
 // QualityStats — показатели расписания в «человеческих» единицах (штуки, пары),
@@ -124,6 +127,18 @@ type QualityStats struct {
 	MaxTeacherPairsInDay int // максимум пар в день у одного преподавателя
 }
 
+// SolverPreferences — необязательные правила, включаемые при генерации.
+// Все выключены по умолчанию: без них алгоритм работает как раньше.
+type SolverPreferences struct {
+	// LectureBeforePractice — практика и лабораторная по предмету у группы не должны
+	// стоять в неделе раньше лекции по нему. Лекция и практика — разные учебные планы,
+	// связь между ними — название предмета без пометки типа в скобках.
+	LectureBeforePractice bool `json:"lecture_before_practice"`
+	// SameSubjectSameDay — несколько пар одного плана (например, две лабораторные
+	// в неделю) у группы ставить в один день, а не разносить по неделе.
+	SameSubjectSameDay bool `json:"same_subject_same_day"`
+}
+
 type InputData struct {
 	Buildings    []Building    `json:"buildings"`
 	Departments  []Department  `json:"departments"`
@@ -131,4 +146,5 @@ type InputData struct {
 	Teachers     []Teacher     `json:"teachers"`
 	Rooms        []Room        `json:"rooms"`
 	SubjectPlans []SubjectPlan `json:"subject_plans"`
+	Preferences  SolverPreferences `json:"-"`
 }

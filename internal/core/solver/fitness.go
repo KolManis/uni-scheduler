@@ -238,6 +238,8 @@ func CalculateFitnessBreakdown(assignments []domain.Assignment, input domain.Inp
 		}
 	}
 
+	b.PracticeBeforeLecture, b.SubjectSpread = preferencePenalties(assignments, input)
+
 	return b
 }
 
