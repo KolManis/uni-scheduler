@@ -37,7 +37,7 @@ type scheduleViewData struct {
 	Schedule     *domain.Schedule
 	DayGroups    []dayGroup
 	Breakdown    domain.FitnessBreakdown
-	Quality      domain.QualityStats
+	Quality      domain.WeekQuality
 	Teachers     []domain.Teacher
 	Rooms        []domain.Room
 	Buildings    []domain.Building

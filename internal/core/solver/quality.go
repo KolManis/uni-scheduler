@@ -6,9 +6,17 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
-// CalculateQuality считает показатели расписания в штуках. Пары чётной и нечётной
-// недели в одном слоте считаются одной парой — как и в CalculateFitnessBreakdown.
-func CalculateQuality(assignments []domain.Assignment) domain.QualityStats {
+// CalculateQuality — показатели в штуках, отдельно для чётной и нечётной недели:
+// у каждой недели своё расписание (пары «всегда» плюс пары своей чётности).
+func CalculateQuality(assignments []domain.Assignment) domain.WeekQuality {
+	return domain.WeekQuality{
+		Even: weekQuality(assignmentsInWeek(assignments, domain.Even)),
+		Odd:  weekQuality(assignmentsInWeek(assignments, domain.Odd)),
+	}
+}
+
+// weekQuality — показатели одной недели; на вход только её пары.
+func weekQuality(assignments []domain.Assignment) domain.QualityStats {
 	type dayKey struct {
 		id  string
 		day domain.Day

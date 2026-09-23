@@ -163,10 +163,66 @@ func TestSlotPenalty_PrefersDayWithSinglePair(t *testing.T) {
 				GroupIDs:  []string{"G1"},
 			}
 
-			sameDay := slotPenalty(state, tt.sameDay, subject, domain.Practice, subject.GroupIDs, tt.sameDay.Day(), "T2")
-			newDay := slotPenalty(state, tt.newDay, subject, domain.Practice, subject.GroupIDs, tt.newDay.Day(), "T2")
+			sameDay := slotPenalty(state, tt.sameDay, subject, domain.Practice, domain.Always, subject.GroupIDs, tt.sameDay.Day(), "T2")
+			newDay := slotPenalty(state, tt.newDay, subject, domain.Practice, domain.Always, subject.GroupIDs, tt.newDay.Day(), "T2")
 			if sameDay >= newDay {
 				t.Errorf("штраф за день с парой (%d) должен быть меньше, чем за новый день (%d)", sameDay, newDay)
+			}
+		})
+	}
+}
+
+// TestSlotPenalty_BlinkingPairFillsOtherWeekGap — «мигалка»: пара по чётным ставится туда,
+// где у группы пара только по нечётным. У группы 1-я пара всегда, 2-я по нечётным, 3-я
+// всегда: в чётную неделю 2-я пара — окно. Раньше построение считало 2-ю пару занятой
+// в обе недели, видело перегруженный день и уводило новую пару в другой день, оставляя
+// окно в чётной неделе.
+func TestSlotPenalty_BlinkingPairFillsOtherWeekGap(t *testing.T) {
+	tests := []struct {
+		name     string
+		gapSlot  domain.TimeSlot
+		otherDay domain.TimeSlot
+	}{
+		{
+			name:     "пара по чётным в окно чётной недели дешевле, чем в пустой день",
+			gapSlot:  domain.MustNewTimeSlot(domain.Monday, 2),
+			otherDay: domain.MustNewTimeSlot(domain.Tuesday, 1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := newTeacherState(domain.InputData{})
+			state.assignments = []domain.Assignment{
+				{
+					GroupIDs:  []string{"G1"},
+					TeacherID: "T1",
+					TimeSlot:  domain.MustNewTimeSlot(domain.Monday, 1),
+					Parity:    domain.Always,
+				},
+				{
+					GroupIDs:  []string{"G1"},
+					TeacherID: "T2",
+					TimeSlot:  domain.MustNewTimeSlot(domain.Monday, 2),
+					Parity:    domain.Odd,
+				},
+				{
+					GroupIDs:  []string{"G1"},
+					TeacherID: "T3",
+					TimeSlot:  domain.MustNewTimeSlot(domain.Monday, 3),
+					Parity:    domain.Always,
+				},
+			}
+			subject := domain.SubjectPlan{
+				ID:        "SP-EVEN",
+				TeacherID: "T4",
+				GroupIDs:  []string{"G1"},
+			}
+
+			inGap := slotPenalty(state, tt.gapSlot, subject, domain.Practice, domain.Even, subject.GroupIDs, tt.gapSlot.Day(), "T4")
+			elsewhere := slotPenalty(state, tt.otherDay, subject, domain.Practice, domain.Even, subject.GroupIDs, tt.otherDay.Day(), "T4")
+			if inGap >= elsewhere {
+				t.Errorf("штраф в окне чётной недели (%d) должен быть меньше, чем в пустом дне (%d)", inGap, elsewhere)
 			}
 		})
 	}

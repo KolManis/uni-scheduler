@@ -66,6 +66,9 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 	// 4 окна у групп: G1 пн 1–3, G2 чт 2–5 (два), G3 пт 2–4.
 	// Суббота: 200 за сам факт + 8000 за единственную пару у G2 в этот день.
 	// SingleClassDay: G2 в среду (1 пара) и G2 в субботу (1 пара) — 2 дня × 4000.
+	// Штрафы считаются по чётной и нечётной неделе и усредняются. TeacherGaps 150:
+	// окно у T3 в пятницу (2-я пара по чётным, 4-я всегда) есть только в чётную
+	// неделю и весит половину — 30 вместо 60.
 	want := domain.FitnessBreakdown{
 		Saturday:             8200,
 		GroupDayOverload:     0,
@@ -74,7 +77,7 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 		TeacherDayOverload:   0,
 		TeacherConcentration: 0,
 		GroupGaps:            40000,
-		TeacherGaps:          180,
+		TeacherGaps:          150,
 		BuildingTransitions:  2000,
 		SingleClassDay:       8000,
 	}
@@ -84,27 +87,27 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 	if got != want {
 		t.Errorf("разбивка штрафа изменилась\nполучено: %+v\nожидалось: %+v", got, want)
 	}
-	if got.Total() != 58580 {
-		t.Errorf("итоговый штраф: получено %d, ожидалось 58580", got.Total())
+	if got.Total() != 58550 {
+		t.Errorf("итоговый штраф: получено %d, ожидалось 58550", got.Total())
 	}
 }
 
 func TestGolden_Converge(t *testing.T) {
-	// Штраф за одиночный день (4000) меньше половины штрафа за окно: сходимость
-	// собирает пары групп по две подряд, не создавая окон. У каждой группы — два дня
-	// по две пары, без окон, без суббот и без дней с единственной парой.
+	// Сходимость собирает пары групп по две подряд без окон, суббот и дней с одной парой
+	// в каждой учебной неделе. У G3 пара по нечётным и пара по чётным стоят в одном слоте
+	// («мигалка»), следом пара «всегда»: в обе недели у G3 две пары подряд.
 	want := strings.Join([]string{
 		"G1|T1|monday|2|always",
 		"G1|T1|tuesday|1|always",
 		"G1|T2|tuesday|2|always",
 		"G1|T3|monday|1|always",
-		"G2|T1|thursday|4|always",
+		"G2|T1|monday|3|always",
 		"G2|T1|thursday|5|always",
-		"G2|T2|wednesday|3|always",
-		"G2|T3|wednesday|4|always",
-		"G3|T2|thursday|1|odd",
-		"G3|T3|thursday|1|even",
-		"G3|T3|thursday|2|always",
+		"G2|T2|monday|2|always",
+		"G2|T3|thursday|4|always",
+		"G3|T2|friday|3|odd",
+		"G3|T3|friday|3|even",
+		"G3|T3|friday|4|always",
 	}, "\n")
 
 	got := converge(goldenAssignments(), domain.InputData{}, time.Now().Add(10*time.Second), nil)

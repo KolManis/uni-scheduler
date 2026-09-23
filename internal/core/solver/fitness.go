@@ -18,15 +18,71 @@ func calculateFitness(assignments []domain.Assignment, input domain.InputData) i
 	return CalculateFitnessBreakdown(assignments, input).Total()
 }
 
-// CalculateFitnessBreakdown — та же логика, что calculateFitness, но с разбивкой по категориям.
+// CalculateFitnessBreakdown — score с разбивкой по категориям.
+//
+// Учебные недели бывают чётные и нечётные, и у каждой своё расписание: пары «всегда»
+// плюс пары своей чётности. Окна, дни с одной парой, перегрузки считаются для каждой
+// недели отдельно, итог — среднее по двум неделям. Раньше обе недели сливались в одну:
+// пара «только по чётным» закрывала слот и в нечётную неделю, где он на самом деле пуст,
+// и реальные окна и форточки были не видны (на реальных данных: оценка видела 2 окна
+// и 0 дней с одной парой, в чётной неделе их было 13 и 40).
+//
+// Если все пары «всегда», обе недели одинаковы и результат совпадает с прежним.
 func CalculateFitnessBreakdown(assignments []domain.Assignment, input domain.InputData) domain.FitnessBreakdown {
+	even := weekBreakdown(assignmentsInWeek(assignments, domain.Even), input)
+	odd := weekBreakdown(assignmentsInWeek(assignments, domain.Odd), input)
+	b := averageBreakdown(even, odd)
+
+	pref := preferencePenalties(assignments, input)
+	b.PracticeBeforeLecture = pref.PracticeBeforeLecture
+	b.LecturePracticeApart = pref.LecturePracticeApart
+	b.SubjectSpread = pref.SubjectSpread
+	return b
+}
+
+// inWeek — идёт ли пара с чётностью parity в неделю week (Even или Odd).
+func inWeek(parity, week domain.Parity) bool {
+	return parity == "" || parity == domain.Always || parity == week
+}
+
+// assignmentsInWeek — пары, которые идут в неделю week.
+func assignmentsInWeek(assignments []domain.Assignment, week domain.Parity) []domain.Assignment {
+	out := make([]domain.Assignment, 0, len(assignments))
+	for _, a := range assignments {
+		if inWeek(a.Parity, week) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func averageBreakdown(even, odd domain.FitnessBreakdown) domain.FitnessBreakdown {
+	avg := func(x, y int) int { return (x + y) / 2 }
+	return domain.FitnessBreakdown{
+		Saturday:             avg(even.Saturday, odd.Saturday),
+		GroupDayOverload:     avg(even.GroupDayOverload, odd.GroupDayOverload),
+		GroupLongDay:         avg(even.GroupLongDay, odd.GroupLongDay),
+		GroupTooFewDays:      avg(even.GroupTooFewDays, odd.GroupTooFewDays),
+		TeacherDayOverload:   avg(even.TeacherDayOverload, odd.TeacherDayOverload),
+		TeacherConcentration: avg(even.TeacherConcentration, odd.TeacherConcentration),
+		GroupGaps:            avg(even.GroupGaps, odd.GroupGaps),
+		TeacherGaps:          avg(even.TeacherGaps, odd.TeacherGaps),
+		BuildingTransitions:  avg(even.BuildingTransitions, odd.BuildingTransitions),
+		SingleClassDay:       avg(even.SingleClassDay, odd.SingleClassDay),
+	}
+}
+
+// weekBreakdown — штрафы одной учебной недели. На вход — только пары, которые идут
+// в эту неделю (см. assignmentsInWeek), поэтому пар с разной чётностью в одном слоте
+// здесь быть не может.
+func weekBreakdown(assignments []domain.Assignment, input domain.InputData) domain.FitnessBreakdown {
 	var b domain.FitnessBreakdown
 
 	groupSlots := make(map[string]map[domain.Day][]int)
 	teacherSlots := make(map[string]map[domain.Day][]int)
 
-	// Дедупликация по (group, day, pairNum): чётные и нечётные пары
-	// в один и тот же слот не создают реального конфликта.
+	// Дедупликация по (group, day, pairNum). Внутри одной недели у группы не может быть
+	// двух пар в одном слоте (жёсткое ограничение), это страховка.
 	type slotKey struct {
 		id  string
 		day domain.Day
@@ -237,11 +293,6 @@ func CalculateFitnessBreakdown(assignments []domain.Assignment, input domain.Inp
 			}
 		}
 	}
-
-	pref := preferencePenalties(assignments, input)
-	b.PracticeBeforeLecture = pref.PracticeBeforeLecture
-	b.LecturePracticeApart = pref.LecturePracticeApart
-	b.SubjectSpread = pref.SubjectSpread
 
 	return b
 }

@@ -21,12 +21,13 @@
 <div class="card" style="margin-bottom:12px;">
   <h2 style="margin-top:0;">Качество расписания</h2>
   <table>
+    <thead><tr><th></th><th>Чётная неделя</th><th>Нечётная неделя</th></tr></thead>
     <tbody>
-      <tr><td>Окна у групп</td><td class="{{if .Quality.GroupGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.GroupGaps}}</td></tr>
-      <tr><td>Дни с одной парой у группы</td><td class="{{if .Quality.SingleClassDays}}score-bad{{else}}score-good{{end}}">{{.Quality.SingleClassDays}}</td></tr>
-      <tr><td>Пар в субботу</td><td class="{{if .Quality.SaturdayPairs}}score-bad{{else}}score-good{{end}}">{{.Quality.SaturdayPairs}}</td></tr>
-      <tr><td>Максимум пар в день у группы</td><td>{{.Quality.MaxGroupPairsPerDay}}</td></tr>
-      <tr><td>Максимум пар в день у преподавателя</td><td>{{.Quality.MaxTeacherPairsInDay}}</td></tr>
+      <tr><td>Окна у групп</td><td class="{{if .Quality.Even.GroupGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.GroupGaps}}</td><td class="{{if .Quality.Odd.GroupGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.GroupGaps}}</td></tr>
+      <tr><td>Дни с одной парой у группы</td><td class="{{if .Quality.Even.SingleClassDays}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.SingleClassDays}}</td><td class="{{if .Quality.Odd.SingleClassDays}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.SingleClassDays}}</td></tr>
+      <tr><td>Пар в субботу</td><td class="{{if .Quality.Even.SaturdayPairs}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.SaturdayPairs}}</td><td class="{{if .Quality.Odd.SaturdayPairs}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.SaturdayPairs}}</td></tr>
+      <tr><td>Максимум пар в день у группы</td><td>{{.Quality.Even.MaxGroupPairsPerDay}}</td><td>{{.Quality.Odd.MaxGroupPairsPerDay}}</td></tr>
+      <tr><td>Максимум пар в день у преподавателя</td><td>{{.Quality.Even.MaxTeacherPairsInDay}}</td><td>{{.Quality.Odd.MaxTeacherPairsInDay}}</td></tr>
     </tbody>
   </table>
 </div>

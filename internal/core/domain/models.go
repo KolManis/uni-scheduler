@@ -128,6 +128,12 @@ type QualityStats struct {
 	MaxTeacherPairsInDay int // максимум пар в день у одного преподавателя
 }
 
+// WeekQuality — показатели отдельно для чётной и нечётной недели.
+type WeekQuality struct {
+	Even QualityStats
+	Odd  QualityStats
+}
+
 // SolverPreferences — необязательные правила, включаемые при генерации.
 // Все выключены по умолчанию: без них алгоритм работает как раньше.
 type SolverPreferences struct {

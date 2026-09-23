@@ -197,7 +197,7 @@ func findBestSlot(state *teacherState, subject domain.SubjectPlan, classType dom
 				continue
 			}
 
-			pen := slotPenalty(state, slot, subject, classType, groupIDs, day, teacher.ID)
+			pen := slotPenalty(state, slot, subject, classType, parity, groupIDs, day, teacher.ID)
 
 			for _, room := range state.input.Rooms {
 				if !isRoomSuitable(room, subject.RequiresRoomType) {
@@ -240,7 +240,7 @@ func findBestSlot(state *teacherState, subject domain.SubjectPlan, classType dom
 }
 
 // slotPenalty вычисляет штраф за постановку занятия в slot для групп groupIDs.
-func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.SubjectPlan, classType domain.ClassType,
+func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.SubjectPlan, classType domain.ClassType, parity domain.Parity,
 	groupIDs []string, day domain.Day, teacherID string) int {
 
 	satPenalty := 0
@@ -265,18 +265,39 @@ func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.Subje
 		}
 	}
 
-	// Штраф за окна у групп
+	// Окна, загрузка дня, переходы и нагрузка преподавателя — по каждой учебной неделе,
+	// в которую идёт пара, и в среднем по двум неделям, как в итоговой оценке. Пара «только
+	// по чётным» меняет только чётную неделю; поставленная туда, где у группы по нечётным
+	// уже стоит другая пара, она закрывает чётной неделе дыру — так получается «мигалка».
+	weekSum := 0
+	for _, week := range []domain.Parity{domain.Even, domain.Odd} {
+		if inWeek(parity, week) {
+			weekSum += weekSlotPenalty(state, slot, subject, groupIDs, day, teacherID, week)
+		}
+	}
+
+	// Глобальный штраф за перегруженный день
+	globalSpread := totalPairsInDay(state, day) * 20
+
+	prefPenalty := preferenceSlotPenalty(state, subject, classType, slot, groupIDs)
+
+	return satPenalty + weekSum/2 + globalSpread + prefPenalty
+}
+
+// weekSlotPenalty — штраф слота для групп и преподавателя в одну учебную неделю:
+// окна, загрузка дня, переходы между корпусами, перегрузка преподавателя.
+func weekSlotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.SubjectPlan,
+	groupIDs []string, day domain.Day, teacherID string, week domain.Parity) int {
+
 	gapPenalty := 0
-	// Штраф за перегрузку дня у конкретных групп
 	groupLoadPenalty := 0
-	// Штраф за переход в другой корпус
 	buildingPenalty := 0
 
 	// Корпус нового занятия определяется required_building_id или корпусом группы
 	newBuilding := subject.RequiredBuildingID
 
 	for _, gid := range groupIDs {
-		existing := groupPairsInDay(state, gid, day)
+		existing := groupPairsInDay(state, gid, day, week)
 		n := len(existing)
 		if n > 0 {
 			all := append(existing, slot.PairNum())
@@ -301,24 +322,19 @@ func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.Subje
 		// Штраф за переход между корпусами. Физкультура не штрафуется: переход в зал
 		// или на стадион для неё обычен и заложен в само занятие.
 		if newBuilding != "" && !isSportRoomType(subject.RequiresRoomType) {
-			buildingPenalty += calcBuildingTransitionPenalty(state, gid, day, slot.PairNum(), newBuilding)
+			buildingPenalty += calcBuildingTransitionPenalty(state, gid, day, slot.PairNum(), newBuilding, week)
 		}
 	}
 
 	// Нагрузка преподавателя за день: 3–4 пары — норма, лёгкое предпочтение разнести
 	// занятия по неделе. Пятая пара — перегрузка, её избегаем почти любой ценой.
-	teacherDayPairs := teacherPairsInDay(state, teacherID, day)
+	teacherDayPairs := teacherPairsInDay(state, teacherID, day, week)
 	teacherSpread := len(teacherDayPairs) * 100
 	if len(teacherDayPairs) >= teacherMaxPairsPerDay {
 		teacherSpread += 20000
 	}
 
-	// Глобальный штраф за перегруженный день
-	globalSpread := totalPairsInDay(state, day) * 20
-
-	prefPenalty := preferenceSlotPenalty(state, subject, classType, slot, groupIDs)
-
-	return satPenalty + gapPenalty*10000 + groupLoadPenalty + teacherSpread + globalSpread + buildingPenalty + prefPenalty
+	return gapPenalty*10000 + groupLoadPenalty + teacherSpread + buildingPenalty
 }
 
 // isSportRoomType — спортзал или открытая площадка. Физкультура проходит там, где решит
@@ -329,10 +345,10 @@ func isSportRoomType(roomType string) bool {
 
 // calcBuildingTransitionPenalty начисляет штраф если новое занятие (pairNum, building)
 // стоит вплотную или через одно окно к уже поставленным парам группы в другом корпусе.
-func calcBuildingTransitionPenalty(state *teacherState, gid string, day domain.Day, pairNum int, newBuilding string) int {
+func calcBuildingTransitionPenalty(state *teacherState, gid string, day domain.Day, pairNum int, newBuilding string, week domain.Parity) int {
 	penalty := 0
 	for _, a := range state.assignments {
-		if a.TimeSlot.Day() != day {
+		if a.TimeSlot.Day() != day || !inWeek(a.Parity, week) {
 			continue
 		}
 		found := false
@@ -370,22 +386,22 @@ func totalPairsInDay(state *teacherState, day domain.Day) int {
 	return count
 }
 
-// teacherPairsInDay возвращает номера пар преподавателя в указанный день.
-func teacherPairsInDay(state *teacherState, teacherID string, day domain.Day) []int {
+// teacherPairsInDay — номера пар преподавателя в указанный день учебной недели week.
+func teacherPairsInDay(state *teacherState, teacherID string, day domain.Day, week domain.Parity) []int {
 	var pairs []int
 	for _, a := range state.assignments {
-		if a.TeacherID == teacherID && a.TimeSlot.Day() == day {
+		if a.TeacherID == teacherID && a.TimeSlot.Day() == day && inWeek(a.Parity, week) {
 			pairs = append(pairs, a.TimeSlot.PairNum())
 		}
 	}
 	return pairs
 }
 
-// groupPairsInDay возвращает номера пар группы в указанный день.
-func groupPairsInDay(state *teacherState, groupID string, day domain.Day) []int {
+// groupPairsInDay — номера пар группы в указанный день учебной недели week.
+func groupPairsInDay(state *teacherState, groupID string, day domain.Day, week domain.Parity) []int {
 	var pairs []int
 	for _, a := range state.assignments {
-		if a.TimeSlot.Day() != day {
+		if a.TimeSlot.Day() != day || !inWeek(a.Parity, week) {
 			continue
 		}
 		for _, gid := range a.GroupIDs {
@@ -687,7 +703,6 @@ func getRemainingHours(state *teacherState, subject domain.SubjectPlan, classTyp
 	return total - current
 }
 
-
 // allSubjectsPlacedTeacher — проверка всех предметов.
 // Мультигрупповые практики/лабы не требуются (best-effort).
 func allSubjectsPlacedTeacher(state *teacherState) bool {
@@ -703,4 +718,3 @@ func allSubjectsPlacedTeacher(state *teacherState) bool {
 	}
 	return true
 }
-

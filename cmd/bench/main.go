@@ -40,7 +40,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("method,run,score,group_gaps,single_days,saturday_pairs,max_group_day,unplaced,seconds")
+	fmt.Println("method,run,score,gaps_even,gaps_odd,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds")
 	for _, method := range strings.Split(*methods, ",") {
 		algo := solver.ImproveAlgorithm(strings.TrimSpace(method))
 		scores := make([]int, 0, *runs)
@@ -53,8 +53,10 @@ func main() {
 			}
 			q := solver.CalculateQuality(sched.Assignments)
 			unplaced := len(solver.ComputeUnplaced(sched.Assignments, *data))
-			fmt.Printf("%s,%d,%d,%d,%d,%d,%d,%d,%.0f\n", algo, run, sched.Score,
-				q.GroupGaps, q.SingleClassDays, q.SaturdayPairs, q.MaxGroupPairsPerDay,
+			fmt.Printf("%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f\n", algo, run, sched.Score,
+				q.Even.GroupGaps, q.Odd.GroupGaps, q.Even.SingleClassDays, q.Odd.SingleClassDays,
+				q.Even.SaturdayPairs+q.Odd.SaturdayPairs,
+				max(q.Even.MaxGroupPairsPerDay, q.Odd.MaxGroupPairsPerDay),
 				unplaced, time.Since(start).Seconds())
 			scores = append(scores, sched.Score)
 		}

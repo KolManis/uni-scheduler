@@ -321,7 +321,7 @@ func (s *Service) Breakdown(sched *domain.Schedule, input domain.InputData) doma
 }
 
 // Quality — показатели расписания в штуках (окна, одиночные дни, суббота).
-func (s *Service) Quality(sched *domain.Schedule) domain.QualityStats {
+func (s *Service) Quality(sched *domain.Schedule) domain.WeekQuality {
 	return solver.CalculateQuality(sched.Assignments)
 }
 
