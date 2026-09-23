@@ -11,7 +11,7 @@
 # Тот же набор команд для PowerShell:  .\make.ps1 <команда>
 
 .DEFAULT_GOAL := help
-.PHONY: help up demo down fresh seed dev db db-reset logs ps test build clean
+.PHONY: help up demo down fresh seed dev db db-reset logs ps test build clean package
 
 DSN ?= postgres://postgres:postgres@127.0.0.1:5432/scheduler?sslmode=disable
 
@@ -107,6 +107,10 @@ test:
 	go build ./...
 	go vet ./...
 	go test ./...
+
+# Пакет для установки на сервер: dist/uni-scheduler.tar.gz (образы, compose, дамп справочников).
+package:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1
 
 # ── диагностика ───────────────────────────────────────────────────────────────
 

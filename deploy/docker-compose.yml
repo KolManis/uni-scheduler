@@ -1,0 +1,47 @@
+# Запуск на сервере из готовых образов — без сборки и без доступа в интернет.
+# Образы загружаются заранее: docker load -i images.tar
+#
+# Настройки — в файле .env рядом (скопировать из .env.example).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: scheduler
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?задайте DB_PASSWORD в .env}
+    # Порт наружу не публикуется: база нужна только приложению внутри сети compose.
+    # Так нет конфликта с уже запущенным на сервере Postgres и база не видна из сети.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d scheduler"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # Скрипты выполняются только при первом запуске, на пустом томе.
+      - ./migrations/0001_init.up.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./migrations/0003_add_semester_half_and_required_building.up.sql:/docker-entrypoint-initdb.d/003_add_semester_half_and_required_building.sql:ro
+      - ./migrations/0004_add_unplaced_to_schedules.up.sql:/docker-entrypoint-initdb.d/004_add_unplaced_to_schedules.sql:ro
+      - ./seed.sql:/docker-entrypoint-initdb.d/900_seed.sql:ro
+
+  app:
+    image: uni-scheduler-app:${APP_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: :8080
+      DATABASE_DSN: postgres://scheduler:${DB_PASSWORD}@postgres:5432/scheduler?sslmode=disable
+    ports:
+      - "${APP_PORT:-18080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  db_data:

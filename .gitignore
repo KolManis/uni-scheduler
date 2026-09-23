@@ -2,6 +2,7 @@
 main.exe
 *.exe
 bin/
+dist/
 
 # Temp Excel lock files
 ~$*
