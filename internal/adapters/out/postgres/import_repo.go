@@ -122,7 +122,6 @@ func (r *ImportRepository) UpsertAll(ctx context.Context, data *domain.ImportedD
 	}
 	type planData struct {
 		groupNames map[string]bool
-		roomType   domain.ClassType
 	}
 	plans := map[planKey]*planData{}
 

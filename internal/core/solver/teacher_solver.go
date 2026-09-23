@@ -542,6 +542,17 @@ func shuffleTasksWithinPriority(tasks []placementTask, rng *rand.Rand) {
 	}
 }
 
+// getSubjectsForTeacher — учебные планы преподавателя в порядке входных данных.
+func getSubjectsForTeacher(input domain.InputData, teacherID string) []domain.SubjectPlan {
+	var plans []domain.SubjectPlan
+	for _, sp := range input.SubjectPlans {
+		if sp.TeacherID == teacherID {
+			plans = append(plans, sp)
+		}
+	}
+	return plans
+}
+
 // collectRemaining — пары этого преподавателя, которые ещё не поставлены. Порядок:
 // одиночные лекции → практики → лабы. Внутри типа — предметы с большим потоком идут раньше.
 func collectRemaining(state *teacherState, input domain.InputData, teacher domain.Teacher) []placementTask {
