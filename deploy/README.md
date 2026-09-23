@@ -57,7 +57,7 @@ PostgreSQL наружу не публикуется и с портами на с
 
 ## Запуск без Docker
 
-Нужен свой PostgreSQL 16 с применёнными `migrations/*.sql` (кроме 0002) и `seed.sql`.
+Нужен свой PostgreSQL 16 с применёнными `migrations/*.sql` и `seed.sql`.
 
 ```bash
 chmod +x scheduler-linux-amd64   # архив собран на Windows, бит исполнения не сохраняется

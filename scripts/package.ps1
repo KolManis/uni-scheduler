@@ -57,7 +57,6 @@ docker cp "${dbContainer}:/tmp/seed.sql" (Join-Path $out 'seed.sql'); Check 'doc
 
 Step 'Конфигурация и миграции'
 Copy-Item deploy\docker-compose.yml, deploy\.env.example, deploy\README.md $out
-# 0002 намеренно не входит: она конфликтует с 0001 (см. docker-compose.yml).
 Copy-Item migrations\0001_init.up.sql, `
           migrations\0003_add_semester_half_and_required_building.up.sql, `
           migrations\0004_add_unplaced_to_schedules.up.sql, `

@@ -15,8 +15,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations/0001_init.up.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
-      # 0002 не подключаем: 0001 уже содержит buildings/departments и все FK-колонки,
-      # а повторный INSERT INTO buildings в 0002 конфликтует по PK (B1/B2) — файл устарел.
       - ./migrations/0003_add_semester_half_and_required_building.up.sql:/docker-entrypoint-initdb.d/003_add_semester_half_and_required_building.sql:ro
       - ./migrations/0004_add_unplaced_to_schedules.up.sql:/docker-entrypoint-initdb.d/004_add_unplaced_to_schedules.sql:ro
       - ./migrations/0005_add_schedule_options.up.sql:/docker-entrypoint-initdb.d/005_add_schedule_options.sql:ro

@@ -51,7 +51,7 @@ internal/core/solver/        алгоритм составления распи�
 internal/adapters/in/http/   REST API и веб-интерфейс
 internal/adapters/in/excel/  разбор Excel при импорте
 internal/adapters/out/postgres/  хранилище
-migrations/                  схема БД (0002 не подключается — конфликтует с 0001)
+migrations/                  схема БД (номера 0002 нет — удалена как дубликат 0001)
 deploy/                      конфигурация для сервера
 ```
 
