@@ -100,7 +100,7 @@ type FitnessBreakdown struct {
 	GroupDayOverload      int // перегрузка дня у группы (4+ / 5+ пар)
 	GroupLongDay          int // длинный день (>4 пар подряд)
 	GroupTooFewDays       int // мало дней при большой нагрузке (группы)
-	TeacherDayOverload    int // день >2 пар у преподавателя
+	TeacherDayOverload    int // день >4 пар у преподавателя (3–4 — норма)
 	TeacherConcentration  int // <3 активных дней у преподавателя при загрузке
 	GroupGaps             int // окна у групп (дороже всего — 10000 за окно)
 	TeacherGaps           int // окна у преподавателей

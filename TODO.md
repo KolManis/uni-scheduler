@@ -17,6 +17,11 @@
 Проверить источники разного порядка: строки из БД без ORDER BY в InputRepository.LoadInput,
 обход map в построении. Пока причина не найдена, результат генерации изредка случайно плохой.
 
+## Мёртвый код (golangci-lint unused)
+Не вызываются нигде, были такими до текущих правок (GO-004 — не удалять попутно):
+- `teacher_heuristics.go`: `orderTeachersByDifficulty`, `generateCompactBlocks`, `findSlotInBlock`;
+- `import_repo.go:125`: поле `roomType`.
+
 ## HC7 в PatchAssignment
 `PatchAssignment` проверяет HC1–HC3 (занятость), но не проверяет HC7 (недоступность
 преподавателя). При ручном переносе занятия можно поставить его в слот, помеченный преподавателем
