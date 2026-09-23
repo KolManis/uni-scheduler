@@ -40,6 +40,7 @@ type scheduleViewData struct {
 	Quality      domain.QualityStats
 	Teachers     []domain.Teacher
 	Rooms        []domain.Room
+	Buildings    []domain.Building
 	Groups       []domain.Group
 	SubjectPlans []domain.SubjectPlan
 	Error        string
@@ -71,6 +72,7 @@ type scheduleGroupsViewData struct {
 	Days         []domain.Day
 	Teachers     []domain.Teacher
 	Rooms        []domain.Room
+	Buildings    []domain.Building
 	SubjectPlans []domain.SubjectPlan
 }
 
@@ -151,7 +153,7 @@ func (h *Handler) schedulesGroupsView(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, r, h.pages["schedules_groups_view.html"], scheduleGroupsViewData{
 		Schedule: sched, Blocks: buildGroupBlocks(sched, data.Groups), Days: allDays,
-		Teachers: data.Teachers, Rooms: data.Rooms, SubjectPlans: data.SubjectPlans,
+		Teachers: data.Teachers, Rooms: data.Rooms, Buildings: data.Buildings, SubjectPlans: data.SubjectPlans,
 	})
 }
 
@@ -289,9 +291,9 @@ func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id in
 	}
 	renderStatus(w, r, status, h.pages["schedules_view.html"], scheduleViewData{
 		Schedule: sched, DayGroups: buildDayGroups(sched),
-		Breakdown: h.svc.Breakdown(sched),
+		Breakdown: h.svc.Breakdown(sched, *data),
 		Quality:   h.svc.Quality(sched),
-		Teachers:  data.Teachers, Rooms: data.Rooms, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
+		Teachers:  data.Teachers, Rooms: data.Rooms, Buildings: data.Buildings, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
 		Error: errMsg, Success: successMsg,
 	})
 }

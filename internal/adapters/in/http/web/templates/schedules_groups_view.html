@@ -3,6 +3,7 @@
 {{$id := .Schedule.ID}}
 {{$teachers := .Teachers}}
 {{$rooms := .Rooms}}
+{{$buildings := .Buildings}}
 {{$subjectPlans := .SubjectPlans}}
 <div class="toolbar">
   <h1>{{.Schedule.Name}} <span class="muted">— по группам</span></h1>
@@ -38,7 +39,7 @@
         <div style="margin-bottom:4px;">
           <b>{{subjectName $subjectPlans .SubjectID}}</b> ({{.Type}})<br>
           {{teacherName $teachers .TeacherID}}<br>
-          ауд. {{roomNumber $rooms .RoomID}}
+          ауд. {{roomLabel $rooms $buildings .RoomID}}
           {{if ne .Parity "always"}}<br><span class="muted">{{.Parity}}</span>{{end}}
         </div>
         {{end}}

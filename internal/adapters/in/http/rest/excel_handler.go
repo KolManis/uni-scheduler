@@ -64,9 +64,17 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 	for _, t := range input.Teachers {
 		teacherMap[t.ID] = t.Name
 	}
+	buildingMap := make(map[string]string)
+	for _, b := range input.Buildings {
+		buildingMap[b.ID] = b.Name
+	}
+	// «номер, корпус»: по одному номеру аудитории не понять, в каком она корпусе.
 	roomMap := make(map[string]string)
 	for _, r := range input.Rooms {
 		roomMap[r.ID] = r.Number
+		if name := buildingMap[r.BuildingID]; name != "" {
+			roomMap[r.ID] = r.Number + ", " + name
+		}
 	}
 	subjectMap := make(map[string]string)
 	for _, s := range input.SubjectPlans {

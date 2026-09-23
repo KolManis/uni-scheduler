@@ -47,7 +47,7 @@ type scheduleService interface {
 	GenerateAllMethods(ctx context.Context, in app.GenerateInput) ([]*domain.Schedule, error)
 	GetByID(ctx context.Context, id int64) (*domain.Schedule, error)
 	List(ctx context.Context) ([]domain.ScheduleSummary, error)
-	Breakdown(sched *domain.Schedule) domain.FitnessBreakdown
+	Breakdown(sched *domain.Schedule, input domain.InputData) domain.FitnessBreakdown
 	Quality(sched *domain.Schedule) domain.QualityStats
 	Delete(ctx context.Context, id int64) error
 	PatchAssignment(ctx context.Context, schedID int64, idx int, req app.PatchRequest) (*domain.Schedule, error)

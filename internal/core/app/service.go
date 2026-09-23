@@ -303,8 +303,11 @@ func (s *Service) List(ctx context.Context) ([]domain.ScheduleSummary, error) {
 //
 // Сценарий нужен как входная точка ядра: веб-интерфейс не должен вызывать алгоритм напрямую,
 // иначе адаптер начинает зависеть от внутренностей солвера в обход слоя сценариев.
-func (s *Service) Breakdown(sched *domain.Schedule) domain.FitnessBreakdown {
-	return solver.CalculateFitnessBreakdown(sched.Assignments, domain.InputData{})
+// Входные данные нужны: оценка смотрит на типы аудиторий (спортзал и стадион
+// в переходах между корпусами не штрафуются). С пустыми данными разбивка
+// расходилась бы с сохранённым score.
+func (s *Service) Breakdown(sched *domain.Schedule, input domain.InputData) domain.FitnessBreakdown {
+	return solver.CalculateFitnessBreakdown(sched.Assignments, input)
 }
 
 // Quality — показатели расписания в штуках (окна, одиночные дни, суббота).

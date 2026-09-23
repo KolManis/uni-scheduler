@@ -109,6 +109,21 @@ var funcMap = template.FuncMap{
 		}
 		return id
 	},
+	// roomLabel — «номер, корпус»: по одному номеру аудитории не понять, в каком она корпусе.
+	"roomLabel": func(rooms []domain.Room, buildings []domain.Building, id string) string {
+		for _, rm := range rooms {
+			if rm.ID != id {
+				continue
+			}
+			for _, b := range buildings {
+				if b.ID == rm.BuildingID {
+					return rm.Number + ", " + b.Name
+				}
+			}
+			return rm.Number
+		}
+		return id
+	},
 	"hasUnavailable": func(slots []domain.TimeSlot, day domain.Day, pair int) bool {
 		for _, s := range slots {
 			if s.Day() == day && s.PairNum() == pair {
