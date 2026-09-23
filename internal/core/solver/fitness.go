@@ -242,33 +242,3 @@ func CalculateFitnessBreakdown(assignments []domain.Assignment, input domain.Inp
 
 	return b
 }
-
-func allSubjectsPlaced(state *solverState) bool {
-	for _, plan := range state.input.SubjectPlans {
-		for _, ct := range []domain.ClassType{domain.Lecture, domain.Practice, domain.Lab} {
-			if ct != domain.Lecture && len(plan.GroupIDs) > 1 {
-				continue
-			}
-
-			current := 0
-			if state.subjectCount[plan.ID] != nil {
-				current = state.subjectCount[plan.ID][ct]
-			}
-
-			var total int
-			switch ct {
-			case domain.Lecture:
-				total = plan.LectureHours
-			case domain.Practice:
-				total = plan.PracticeHours
-			case domain.Lab:
-				total = plan.LabHours
-			}
-
-			if current < total {
-				return false
-			}
-		}
-	}
-	return true
-}

@@ -53,6 +53,10 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidInput) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if errors.Is(err, domain.ErrNoSolution) {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return

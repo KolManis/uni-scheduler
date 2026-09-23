@@ -53,29 +53,6 @@ func isRoomSuitable(room domain.Room, requiredType string) bool {
 	return room.Type == requiredType
 }
 
-func withinSubjectLimit(
-	subjectID string,
-	classType domain.ClassType,
-	currentCount map[string]map[domain.ClassType]int,
-	plan domain.SubjectPlan,
-) bool {
-	current := 0
-	if currentCount[subjectID] != nil {
-		current = currentCount[subjectID][classType]
-	}
-
-	var maxHours int
-	switch classType {
-	case domain.Lecture:
-		maxHours = plan.LectureHours
-	case domain.Practice:
-		maxHours = plan.PracticeHours
-	case domain.Lab:
-		maxHours = plan.LabHours
-	}
-
-	return current < maxHours
-}
 
 func isBuildingAllowedForGroup(buildingID string, group domain.Group) bool {
 	if len(group.BuildingIDs) == 0 {

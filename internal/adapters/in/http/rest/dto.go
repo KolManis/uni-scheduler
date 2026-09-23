@@ -6,7 +6,7 @@ import "github.com/KolManis/uni-scheduler/internal/core/domain"
 type GenerateRequest struct {
 	Name          string              `json:"name"`
 	MaxIterations int                 `json:"max_iterations"`
-	SolverType    string              `json:"solver_type"` // "teacher" | "subject"
+	SolverType    string              `json:"solver_type"` // "" или "teacher" (старый "subject" удалён)
 	TimeoutSec    int                 `json:"timeout_sec"`
 	SemesterHalf  domain.SemesterHalf `json:"semester_half"` // "" | "first" | "second"
 	ImproveAlgo    string              `json:"improve_algo"`    // "hillclimb" | "sa" | "tabu" | "ga" | "lns"

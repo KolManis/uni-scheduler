@@ -17,7 +17,7 @@ var ErrInvalidInput = errors.New("invalid input")
 type GenerateInput struct {
 	Name          string
 	MaxIterations int
-	SolverType    string              // "subject" | "teacher" (default)
+	SolverType    string              // "" или "teacher"; другие значения — ошибка (старый "subject" удалён)
 	TimeoutSec    int                 // 0 → используется дефолт 30 сек
 	SemesterHalf  domain.SemesterHalf // "" | "full" | "first" | "second"
 	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
@@ -63,6 +63,9 @@ func NewService(inputRepo ports.InputRepository, outputRepo ports.OutputReposito
 
 // Generate запускает генерацию расписания.
 func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Schedule, error) {
+	if err := validateSolverType(in.SolverType); err != nil {
+		return nil, err
+	}
 	if in.Name == "" {
 		in.Name = "Untitled"
 	}
@@ -118,16 +121,10 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		var solveErr error
 
 		improve := solver.ImproveAlgorithm(in.ImproveAlgo)
-		switch in.SolverType {
-		case "subject":
-			result, solveErr = solver.SolveParallel(dataForSolver, in.MaxIterations, 4)
-		default:
-			starts := in.ParallelStarts
-			if starts <= 1 {
-				result, solveErr = solver.SolveTeacherWithBudget(dataForSolver, in.MaxIterations, improve, 0, solverBudget)
-			} else {
-				result, solveErr = solver.SolveTeacherMultiStart(dataForSolver, in.MaxIterations, improve, starts, solverBudget)
-			}
+		if in.ParallelStarts <= 1 {
+			result, solveErr = solver.SolveTeacherWithBudget(dataForSolver, in.MaxIterations, improve, 0, solverBudget)
+		} else {
+			result, solveErr = solver.SolveTeacherMultiStart(dataForSolver, in.MaxIterations, improve, in.ParallelStarts, solverBudget)
 		}
 		if solveErr != nil {
 			ch <- solveResult{err: solveErr}
@@ -167,6 +164,9 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 // Общий таймаут применяется ко ВСЕМ пяти прогонам: если задан 120 сек, каждый метод
 // имеет 120 сек, а горутины идут параллельно — весь вызов уложится в те же 120 сек.
 func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*domain.Schedule, error) {
+	if err := validateSolverType(in.SolverType); err != nil {
+		return nil, err
+	}
 	if in.Name == "" {
 		in.Name = "Untitled"
 	}
@@ -421,4 +421,13 @@ func slotsConflict(a, b domain.Assignment) bool {
 		return true
 	}
 	return pa == pb
+}
+
+// validateSolverType — остался один солвер (teacher-driven). Старый поиск с возвратом
+// ("subject") удалён: на реальных данных он давал score ~918000 против ~13000.
+func validateSolverType(solverType string) error {
+	if solverType == "" || solverType == "teacher" {
+		return nil
+	}
+	return fmt.Errorf("%w: solver_type %q не поддерживается, доступен только \"teacher\"", ErrInvalidInput, solverType)
 }

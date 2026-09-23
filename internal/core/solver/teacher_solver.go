@@ -110,9 +110,12 @@ func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve Improve
 		}
 	}
 
+	// Если что-то не поместилось, результат всё равно доводится до конца: непоставленные
+	// пары попадают в отчёт unplaced (ComputeUnplaced). Раньше здесь весь результат
+	// выбрасывался и запускался старый поиск с возвратом, дававший расписание в десятки
+	// раз хуже (score ~918000 против ~13000 на тех же данных).
 	if !allSubjectsPlacedTeacher(state) {
-		state.logger.Warn("not all subjects placed, using fallback solver")
-		return fallbackSolve(state)
+		state.logger.Warn("not all subjects placed, continuing; see unplaced report")
 	}
 
 	improved := LocalSearch(state.assignments, state.input, improve, budget)
@@ -672,18 +675,6 @@ func getRemainingHours(state *teacherState, subject domain.SubjectPlan, classTyp
 	return total - current
 }
 
-// subjectRemainingTeacher — проверка остатка: пробовать ли ещё ставить этот предмет.
-// В отличие от allSubjectsPlacedTeacher, здесь мультигрупповые практики/лабы НЕ пропускаются —
-// иначе они вообще ни разу не попадут в findBestSlot/placeGroupsSplit и тихо останутся
-// неразмещёнными, даже не попытавшись разъехаться по разным слотам (см. ComputeUnplaced).
-func subjectRemainingTeacher(state *teacherState, subject domain.SubjectPlan) bool {
-	for _, ct := range []domain.ClassType{domain.Lecture, domain.Practice, domain.Lab} {
-		if getRemainingHours(state, subject, ct) > 0 {
-			return true
-		}
-	}
-	return false
-}
 
 // allSubjectsPlacedTeacher — проверка всех предметов.
 // Мультигрупповые практики/лабы не требуются (best-effort).
@@ -701,8 +692,3 @@ func allSubjectsPlacedTeacher(state *teacherState) bool {
 	return true
 }
 
-// fallbackSolve — fallback на параллельный солвер
-func fallbackSolve(state *teacherState) (*domain.Schedule, error) {
-	state.logger.Info("using fallback parallel solver")
-	return SolveParallel(state.input, 100000, 4)
-}
