@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"sort"
+	"time"
 
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
@@ -59,16 +60,25 @@ func newTeacherState(input domain.InputData) *teacherState {
 // недоступных слотов = ниже гибкость = раньше в очереди. Разбиение состава на подпотоки
 // запрещено — см. placeGroupsSplit.
 func SolveTeacher(input domain.InputData, maxIter int, improve ImproveAlgorithm) (*domain.Schedule, error) {
-	return SolveTeacherWithSeed(input, maxIter, improve, 0)
+	return SolveTeacherWithBudget(input, maxIter, improve, 0, 0)
 }
 
-// SolveTeacherWithSeed — то же, что SolveTeacher, но со случайным зерном для
-// многостартового поиска (SolveTeacherMultiStart). seed == 0 — детерминированное
-// построение (полный аналог поведения SolveTeacher до многостартовости).
-// Ненулевой seed перемешивает преподавателей и предметы В ПРЕДЕЛАХ одной и той же
-// приоритетной группы: расписания получаются разные, но общая стратегия сохраняется —
-// жёсткие всё равно идут раньше гибких, потоковые лекции — раньше одиночных.
+// SolveTeacherWithSeed — SolveTeacher со случайным зерном для многостартового поиска.
+// Сохранён для обратной совместимости.
 func SolveTeacherWithSeed(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64) (*domain.Schedule, error) {
+	return SolveTeacherWithBudget(input, maxIter, improve, seed, 0)
+}
+
+// SolveTeacherWithBudget — SolveTeacher с явно заданным бюджетом на локальный поиск.
+//
+// budget == 0 — используется дефолтный localSearchTotalBudget (60 сек). Для параллельных
+// сценариев (несколько горутин конкурируют за CPU) вызывающая сторона должна передавать
+// бюджет с запасом, иначе deadline срабатывает на converge и метаэвристика не успевает
+// сделать ни одной итерации — все методы возвращают одинаковый score чистого построения.
+//
+// seed == 0 — детерминированное построение. Ненулевой seed перемешивает преподавателей
+// и предметы в пределах одной и той же приоритетной группы.
+func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64, budget time.Duration) (*domain.Schedule, error) {
 	state := newTeacherState(input)
 
 	var rng *rand.Rand
@@ -99,7 +109,7 @@ func SolveTeacherWithSeed(input domain.InputData, maxIter int, improve ImproveAl
 		return fallbackSolve(state)
 	}
 
-	improved := LocalSearch(state.assignments, state.input, improve)
+	improved := LocalSearch(state.assignments, state.input, improve, budget)
 	score := calculateFitness(improved, state.input)
 
 	state.logger.Info("teacher-driven solve complete",

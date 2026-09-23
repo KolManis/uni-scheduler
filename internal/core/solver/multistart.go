@@ -8,22 +8,17 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
-// SolveTeacherMultiStart запускает SolveTeacherWithSeed `starts` раз параллельно
+// SolveTeacherMultiStart запускает SolveTeacherWithBudget `starts` раз параллельно
 // с разными зёрнами случайности и возвращает лучший результат.
 //
-// Идея: жадное построение стохастически чувствительно к порядку решений. Чуть-чуть
-// перемешав преподавателей и предметы в пределах равного приоритета, можно получить
-// заметно разные локальные оптимумы. Из N вариантов выбираем тот, у которого score
-// самый низкий. Параллелизм честный: каждая горутина строит своё расписание с нуля,
-// свою метаэвристику применяет самостоятельно, они друг о друге не знают.
+// budget == 0 — используется дефолтный localSearchTotalBudget. При параллельных запусках
+// вызывающая сторона обязана передавать увеличенный бюджет, чтобы все N горутин успевали
+// сделать метаэвристику под конкуренцией за CPU.
 //
-// starts == 0 или 1 — один запуск, как обычный SolveTeacher (детерминированный).
-// starts > 1 — первый запуск детерминированный (seed=0), остальные с уникальными
-// зёрнами. Это гарантирует, что результат никогда не хуже одиночного SolveTeacher:
-// вариант с seed=0 всегда участвует в выборе лучшего.
-func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve ImproveAlgorithm, starts int) (*domain.Schedule, error) {
+// starts == 0 или 1 — один запуск, как обычный SolveTeacher.
+func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve ImproveAlgorithm, starts int, budget time.Duration) (*domain.Schedule, error) {
 	if starts <= 1 {
-		return SolveTeacher(input, maxIter, improve)
+		return SolveTeacherWithBudget(input, maxIter, improve, 0, budget)
 	}
 
 	type result struct {
@@ -49,7 +44,7 @@ func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve Improve
 		wg.Add(1)
 		go func(idx int, s int64) {
 			defer wg.Done()
-			sched, err := SolveTeacherWithSeed(input, maxIter, improve, s)
+			sched, err := SolveTeacherWithBudget(input, maxIter, improve, s, budget)
 			results[idx] = result{sched: sched, err: err, seed: s}
 		}(i, seed)
 	}

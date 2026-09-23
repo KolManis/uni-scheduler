@@ -98,6 +98,14 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 	}
 	ch := make(chan solveResult, 1)
 
+	// Бюджет солвера — общий таймаут минус 15 секунд буфера на сохранение в БД
+	// и накладные расходы. Раньше внутри солвера был захардкожен 60 сек, из-за чего
+	// при timeout_sec=400 солвер завершался за минуту и не использовал оставшиеся 340.
+	solverBudget := time.Duration(in.TimeoutSec-15) * time.Second
+	if solverBudget < 30*time.Second {
+		solverBudget = 30 * time.Second
+	}
+
 	go func() {
 		var result *domain.Schedule
 		var solveErr error
@@ -109,9 +117,9 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		default:
 			starts := in.ParallelStarts
 			if starts <= 1 {
-				result, solveErr = solver.SolveTeacher(*data, in.MaxIterations, improve)
+				result, solveErr = solver.SolveTeacherWithBudget(*data, in.MaxIterations, improve, 0, solverBudget)
 			} else {
-				result, solveErr = solver.SolveTeacherMultiStart(*data, in.MaxIterations, improve, starts)
+				result, solveErr = solver.SolveTeacherMultiStart(*data, in.MaxIterations, improve, starts, solverBudget)
 			}
 		}
 		ch <- solveResult{result, solveErr}
@@ -191,14 +199,22 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	results := make([]genResult, len(methods))
 	done := make(chan int, len(methods))
 
+	// Бюджет солвера — общий таймаут минус 15 секунд буфера. Каждой из 5 горутин
+	// достаётся столько же wall-clock, чтобы под конкуренцией за CPU успеть converge
+	// и метаэвристику. При budget по умолчанию (60 сек) и 5 параллельных горутинах на
+	// 4-8 ядрах каждая едва успевала converge, и все методы возвращали одинаковый
+	// score чистого построения.
+	solverBudget := time.Duration(in.TimeoutSec-15) * time.Second
+	if solverBudget < 30*time.Second {
+		solverBudget = 30 * time.Second
+	}
+
 	// При «все методы» игнорируем ParallelStarts: 5 методов уже дают 5 параллельных
 	// горутин. Если умножать на 3-8 стартов внутри каждого, получаем 15-40 горутин,
-	// конкурирующих за ~4-8 ядер CPU. Каждая метаэвристика с таймером 60 сек не
-	// успевает за общий wall-clock, converge не досходится, score деградирует в 5-7 раз
-	// (проверено: 8 стартов × 5 методов = score 170k-213k против одиночных ~30k).
+	// конкурирующих за ~4-8 ядер CPU.
 	for i, m := range methods {
 		go func(idx int, algo solver.ImproveAlgorithm, suffix string) {
-			sched, solveErr := solver.SolveTeacher(*data, in.MaxIterations, algo)
+			sched, solveErr := solver.SolveTeacherWithBudget(*data, in.MaxIterations, algo, 0, solverBudget)
 			results[idx] = genResult{sched: sched, err: solveErr}
 			done <- idx
 		}(i, m.algo, m.suffix)

@@ -57,14 +57,22 @@ const (
 	ImproveLNS                ImproveAlgorithm = "lns"       // large neighborhood search: разрушение-восстановление
 )
 
-// LocalSearch улучшает расписание в два этапа, уложившись в localSearchTotalBudget суммарно:
+// LocalSearch улучшает расписание в два этапа, уложившись в бюджете суммарно:
 //  1. converge — детерминированные 2-opt/or-opt по очереди до сходимости.
 //  2. Одна из мета-эвристик (algo) поверх сошедшегося результата: помогает
 //     выбраться из локального оптимума, куда converge не пускает.
 //
+// budget == 0 — используется дефолт localSearchTotalBudget (60 сек). Для параллельных
+// запусков (несколько горутин конкурируют за CPU) вызывающая сторона должна передавать
+// увеличенный бюджет, иначе deadline срабатывает на converge и метаэвристика не успевает
+// ни одной итерации сделать.
+//
 // Пустой algo эквивалентен ImproveHillClimb (значение по умолчанию, поведение как раньше).
-func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo ImproveAlgorithm) []domain.Assignment {
-	deadline := time.Now().Add(localSearchTotalBudget)
+func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo ImproveAlgorithm, budget time.Duration) []domain.Assignment {
+	if budget <= 0 {
+		budget = localSearchTotalBudget
+	}
+	deadline := time.Now().Add(budget)
 	unavail := buildTeacherUnavailable(input)
 	current := converge(assignments, input, deadline, unavail)
 
