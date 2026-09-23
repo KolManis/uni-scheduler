@@ -128,6 +128,50 @@ func TestPlaceGroupsSplit_KeepsGroupsTogether(t *testing.T) {
 	}
 }
 
+// TestSlotPenalty_PrefersDayWithSinglePair — при построении вторую пару группы выгоднее
+// поставить в день, где у неё уже есть одна пара, чем открыть новый день. Раньше было
+// наоборот, и построение само создавало дни с единственной парой.
+func TestSlotPenalty_PrefersDayWithSinglePair(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing domain.TimeSlot
+		sameDay  domain.TimeSlot
+		newDay   domain.TimeSlot
+	}{
+		{
+			name:     "вплотную к паре понедельника дешевле, чем пустой вторник",
+			existing: domain.MustNewTimeSlot(domain.Monday, 1),
+			sameDay:  domain.MustNewTimeSlot(domain.Monday, 2),
+			newDay:   domain.MustNewTimeSlot(domain.Tuesday, 1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := newTeacherState(domain.InputData{})
+			state.assignments = []domain.Assignment{
+				{
+					GroupIDs:  []string{"G1"},
+					TeacherID: "T1",
+					TimeSlot:  tt.existing,
+					Parity:    domain.Always,
+				},
+			}
+			subject := domain.SubjectPlan{
+				ID:        "SP2",
+				TeacherID: "T2",
+				GroupIDs:  []string{"G1"},
+			}
+
+			sameDay := slotPenalty(state, tt.sameDay, subject, subject.GroupIDs, tt.sameDay.Day(), "T2")
+			newDay := slotPenalty(state, tt.newDay, subject, subject.GroupIDs, tt.newDay.Day(), "T2")
+			if sameDay >= newDay {
+				t.Errorf("штраф за день с парой (%d) должен быть меньше, чем за новый день (%d)", sameDay, newDay)
+			}
+		})
+	}
+}
+
 func TestCalcGaps(t *testing.T) {
 	cases := []struct {
 		pairs []int

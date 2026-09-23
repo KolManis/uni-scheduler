@@ -272,15 +272,20 @@ func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.Subje
 			all := append(existing, slot.PairNum())
 			gapPenalty += calcGaps(all)
 		}
+		// Пустой день дороже дня с одной парой: иначе построение раскидывает первые пары
+		// группы по разным дням и само создаёт дни с единственной парой, которые потом
+		// локальный поиск не может собрать без окон.
 		switch {
 		case n >= 4:
 			groupLoadPenalty += 50000
 		case n == 3:
 			groupLoadPenalty += 15000
 		case n == 2:
-			groupLoadPenalty += 4000
+			groupLoadPenalty += 1000
 		case n == 1:
-			groupLoadPenalty += 800
+			groupLoadPenalty += 0
+		default:
+			groupLoadPenalty += 1500
 		}
 
 		// Штраф за переход между корпусами
