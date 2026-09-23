@@ -6,7 +6,7 @@
 
 <div class="card" style="margin-bottom:24px;">
   <h2>Сгенерировать новое расписание</h2>
-  <form hx-post="/ui/schedules/generate" hx-target="#main" hx-pending-text="Генерируется… (до 2 мин, все методы параллельно)">
+  <form hx-post="/ui/schedules/generate" hx-target="#main" hx-pending-text="Генерируется расписание…">
     <div class="form-row">
       <div class="field">
         <label>Название</label>
@@ -58,7 +58,6 @@
       </div>
     </div>
     <button class="btn" type="submit">Сгенерировать</button>
-    <span class="muted">Может занять до минуты — дождитесь ответа.</span>
   </form>
 </div>
 
