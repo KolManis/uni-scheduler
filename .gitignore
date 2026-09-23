@@ -17,3 +17,17 @@ vendor/
 CLAUDE.md
 docs/harness-engineering-guide.md
 .diploma_backup_*/
+
+# Документы, данные и рабочие материалы — не часть кода приложения
+*.docx
+*.xlsx
+docs/
+diagrams/
+images/
+progress.md
+TODO.md
+data/*.sql
+data/00_README.md
+scripts/extend_snapshots_general_ed.ps1
+# Пишется scripts/migrate.* и описывает одну конкретную базу (UUID меняются после make seed)
+id_map.json
