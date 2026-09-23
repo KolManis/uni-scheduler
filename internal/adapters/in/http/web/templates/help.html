@@ -1,20 +1,23 @@
 {{define "title"}}Справка{{end}}
 {{define "content"}}
+<div class="help">
 <h1>Справка</h1>
 
-<div class="card" style="margin-bottom:20px;">
-  <b>Содержание:</b>
-  <a href="#overview">Что делает система</a> ·
-  <a href="#workflow">Порядок работы</a> ·
-  <a href="#data">Справочники</a> ·
-  <a href="#generate">Генерация</a> ·
-  <a href="#rules">Дополнительные правила</a> ·
-  <a href="#view">Просмотр и качество</a> ·
-  <a href="#score">Как считается score</a> ·
-  <a href="#hard">Жёсткие ограничения</a> ·
-  <a href="#edit">Ручной перенос</a> ·
-  <a href="#unplaced">Не размещено</a> ·
-  <a href="#limits">Ограничения</a>
+<div class="card help-toc" style="margin-bottom:20px;">
+  <b>Содержание</b>
+  <ol>
+    <li><a href="#overview">Что делает система</a></li>
+    <li><a href="#workflow">Порядок работы</a></li>
+    <li><a href="#data">Справочники</a></li>
+    <li><a href="#generate">Генерация — поля формы</a></li>
+    <li><a href="#rules">Дополнительные правила</a></li>
+    <li><a href="#view">Просмотр и качество</a></li>
+    <li><a href="#score">Как считается score</a></li>
+    <li><a href="#hard">Жёсткие ограничения</a></li>
+    <li><a href="#edit">Ручной перенос пары</a></li>
+    <li><a href="#unplaced">Если что-то «не размещено»</a></li>
+    <li><a href="#limits">Ограничения</a></li>
+  </ol>
 </div>
 
 <h2 id="overview">Что делает система</h2>
@@ -203,5 +206,6 @@
     <li>Связь лекции и практики — <b>по названию предмета</b>: если названия записаны по-разному (например, на разных языках), правила про лекции и практики их не свяжут.</li>
     <li>Алгоритм эвристический: он находит хорошее, но не гарантированно наилучшее из возможных расписаний.</li>
   </ul>
+</div>
 </div>
 {{end}}

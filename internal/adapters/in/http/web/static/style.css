@@ -197,3 +197,10 @@ select {
 
 .score-good { color: var(--success-text); font-weight: 600; }
 .score-bad { color: var(--danger); font-weight: 600; }
+
+/* Справка: колонка по центру, содержание списком в две колонки */
+.help { max-width: 900px; margin: 0 auto; }
+.help .card { max-width: none; }
+.help-toc ol { columns: 2; column-gap: 32px; margin: 8px 0 0; padding-left: 20px; }
+.help-toc li { margin: 4px 0; break-inside: avoid; }
+@media (max-width: 640px) { .help-toc ol { columns: 1; } }
