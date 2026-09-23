@@ -225,8 +225,9 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 		ImproveAlgo:    r.FormValue("improve_algo"),
 		ParallelStarts: atoi(r.FormValue("parallel_starts"), 1),
 		Preferences: domain.SolverPreferences{
-			LectureBeforePractice: r.FormValue("lecture_before_practice") != "",
-			SameSubjectSameDay:    r.FormValue("same_subject_same_day") != "",
+			LectureBeforePractice:  r.FormValue("lecture_before_practice") != "",
+			LecturePracticeSameDay: r.FormValue("lecture_practice_same_day") != "",
+			SameSubjectSameDay:     r.FormValue("same_subject_same_day") != "",
 		},
 	}
 

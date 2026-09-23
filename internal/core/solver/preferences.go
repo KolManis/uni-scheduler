@@ -12,6 +12,7 @@ import (
 // не должно ради себя создавать форточки и окна.
 const (
 	practiceBeforeLecturePenalty = 2000
+	lecturePracticeApartPenalty  = 2000
 	subjectSpreadPenalty         = 3000
 )
 
@@ -43,12 +44,27 @@ func weekPosition(slot domain.TimeSlot) int {
 	return 0
 }
 
-// preferencePenalties считает штрафы необязательных правил для готового расписания.
-func preferencePenalties(assignments []domain.Assignment, input domain.InputData) (beforeLecture, spread int) {
-	prefs := input.Preferences
-	if !prefs.LectureBeforePractice && !prefs.SameSubjectSameDay {
-		return 0, 0
+// followsLectureSameDay — в тот же день, что и слот практики, раньше него есть лекция.
+func followsLectureSameDay(practice domain.TimeSlot, lectures []domain.TimeSlot) bool {
+	for _, lec := range lectures {
+		if lec.Day() == practice.Day() && lec.PairNum() < practice.PairNum() {
+			return true
+		}
 	}
+	return false
+}
+
+// prefPenalties — штрафы необязательных правил по отдельности, для разбивки score.
+type prefPenalties struct {
+	PracticeBeforeLecture int
+	LecturePracticeApart  int
+	SubjectSpread         int
+}
+
+// preferencePenalties считает штрафы необязательных правил для готового расписания.
+func preferencePenalties(assignments []domain.Assignment, input domain.InputData) prefPenalties {
+	var p prefPenalties
+	prefs := input.Preferences
 
 	if prefs.SameSubjectSameDay {
 		type planGroup struct{ plan, group string }
@@ -66,42 +82,59 @@ func preferencePenalties(assignments []domain.Assignment, input domain.InputData
 			}
 		}
 		for _, d := range days {
-			spread += (len(d) - 1) * subjectSpreadPenalty
+			p.SubjectSpread += (len(d) - 1) * subjectSpreadPenalty
 		}
 	}
 
-	if prefs.LectureBeforePractice {
-		keyOf := make(map[string]string, len(input.SubjectPlans))
-		for _, sp := range input.SubjectPlans {
-			keyOf[sp.ID] = subjectKey(sp.Name)
+	if !prefs.LectureBeforePractice && !prefs.LecturePracticeSameDay {
+		return p
+	}
+
+	keyOf := make(map[string]string, len(input.SubjectPlans))
+	for _, sp := range input.SubjectPlans {
+		keyOf[sp.ID] = subjectKey(sp.Name)
+	}
+	type subjGroup struct{ subject, group string }
+	lectures := make(map[subjGroup][]domain.TimeSlot)
+	for _, a := range assignments {
+		if a.Type != domain.Lecture {
+			continue
 		}
-		type subjGroup struct{ subject, group string }
-		firstLecture := make(map[subjGroup]int)
-		for _, a := range assignments {
-			if a.Type != domain.Lecture {
+		for _, gid := range a.GroupIDs {
+			k := subjGroup{keyOf[a.SubjectID], gid}
+			lectures[k] = append(lectures[k], a.TimeSlot)
+		}
+	}
+
+	for _, a := range assignments {
+		if a.Type == domain.Lecture {
+			continue
+		}
+		pos := weekPosition(a.TimeSlot)
+		for _, gid := range a.GroupIDs {
+			lecs, ok := lectures[subjGroup{keyOf[a.SubjectID], gid}]
+			if !ok {
 				continue
 			}
-			pos := weekPosition(a.TimeSlot)
-			for _, gid := range a.GroupIDs {
-				k := subjGroup{keyOf[a.SubjectID], gid}
-				if cur, ok := firstLecture[k]; !ok || pos < cur {
-					firstLecture[k] = pos
-				}
+			if prefs.LectureBeforePractice && pos < earliest(lecs) {
+				p.PracticeBeforeLecture += practiceBeforeLecturePenalty
 			}
-		}
-		for _, a := range assignments {
-			if a.Type == domain.Lecture {
-				continue
-			}
-			pos := weekPosition(a.TimeSlot)
-			for _, gid := range a.GroupIDs {
-				if lec, ok := firstLecture[subjGroup{keyOf[a.SubjectID], gid}]; ok && pos < lec {
-					beforeLecture += practiceBeforeLecturePenalty
-				}
+			if prefs.LecturePracticeSameDay && !followsLectureSameDay(a.TimeSlot, lecs) {
+				p.LecturePracticeApart += lecturePracticeApartPenalty
 			}
 		}
 	}
-	return beforeLecture, spread
+	return p
+}
+
+func earliest(slots []domain.TimeSlot) int {
+	first := weekPosition(slots[0])
+	for _, s := range slots[1:] {
+		if pos := weekPosition(s); pos < first {
+			first = pos
+		}
+	}
+	return first
 }
 
 // preferenceSlotPenalty — те же правила при построении: насколько слот нежелателен
@@ -129,22 +162,43 @@ func preferenceSlotPenalty(state *teacherState, subject domain.SubjectPlan, clas
 		}
 	}
 
-	if prefs.LectureBeforePractice {
-		key := state.planKeys[subject.ID]
-		pos := weekPosition(slot)
-		for _, a := range state.assignments {
-			if state.planKeys[a.SubjectID] != key || !sharesGroup(a.GroupIDs, groupIDs) {
-				continue
-			}
-			other := weekPosition(a.TimeSlot)
-			isLecture := classType == domain.Lecture
-			otherIsLecture := a.Type == domain.Lecture
-			if isLecture && !otherIsLecture && pos > other {
+	if !prefs.LectureBeforePractice && !prefs.LecturePracticeSameDay {
+		return penalty
+	}
+
+	// Уже поставленные занятия того же предмета у тех же групп.
+	key := state.planKeys[subject.ID]
+	var lectures, practices []domain.TimeSlot
+	for _, a := range state.assignments {
+		if state.planKeys[a.SubjectID] != key || !sharesGroup(a.GroupIDs, groupIDs) {
+			continue
+		}
+		if a.Type == domain.Lecture {
+			lectures = append(lectures, a.TimeSlot)
+		} else {
+			practices = append(practices, a.TimeSlot)
+		}
+	}
+
+	pos := weekPosition(slot)
+	if classType == domain.Lecture {
+		for _, pr := range practices {
+			if prefs.LectureBeforePractice && weekPosition(pr) < pos {
 				penalty += practiceBeforeLecturePenalty
 			}
-			if !isLecture && otherIsLecture && pos < other {
-				penalty += practiceBeforeLecturePenalty
+			if prefs.LecturePracticeSameDay && !followsLectureSameDay(pr, []domain.TimeSlot{slot}) {
+				penalty += lecturePracticeApartPenalty
 			}
+		}
+		return penalty
+	}
+
+	if len(lectures) > 0 {
+		if prefs.LectureBeforePractice && pos < earliest(lectures) {
+			penalty += practiceBeforeLecturePenalty
+		}
+		if prefs.LecturePracticeSameDay && !followsLectureSameDay(slot, lectures) {
+			penalty += lecturePracticeApartPenalty
 		}
 	}
 	return penalty

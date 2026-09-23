@@ -46,6 +46,7 @@
       <tr><td>Окна у преподавателей</td><td class="{{if .Breakdown.TeacherGaps}}score-bad{{end}}">{{.Breakdown.TeacherGaps}}</td><td>то же самое, но для преподавателя (дешевле)</td></tr>
       <tr><td>Переходы между корпусами</td><td class="{{if .Breakdown.BuildingTransitions}}score-bad{{end}}">{{.Breakdown.BuildingTransitions}}</td><td>занятия группы подряд в разных корпусах</td></tr>
       <tr><td>«Форточка»</td><td class="{{if .Breakdown.SingleClassDay}}score-bad{{end}}">{{.Breakdown.SingleClassDay}}</td><td>всего 1 пара в день у группы</td></tr>
+      {{if .Schedule.Options.LecturePracticeSameDay}}<tr><td>Практика не в день лекции</td><td class="{{if .Breakdown.LecturePracticeApart}}score-bad{{end}}">{{.Breakdown.LecturePracticeApart}}</td><td>практика или лабораторная не стоит в тот же день после лекции по предмету</td></tr>{{end}}
       {{if .Schedule.Options.LectureBeforePractice}}<tr><td>Практика раньше лекции</td><td class="{{if .Breakdown.PracticeBeforeLecture}}score-bad{{end}}">{{.Breakdown.PracticeBeforeLecture}}</td><td>практика или лабораторная стоит в неделе раньше лекции по предмету</td></tr>{{end}}
       {{if .Schedule.Options.SameSubjectSameDay}}<tr><td>Предмет в разные дни</td><td class="{{if .Breakdown.SubjectSpread}}score-bad{{end}}">{{.Breakdown.SubjectSpread}}</td><td>пары одного предмета у группы разнесены по разным дням</td></tr>{{end}}
     </tbody>

@@ -106,7 +106,8 @@ type FitnessBreakdown struct {
 	TeacherGaps           int // окна у преподавателей
 	BuildingTransitions   int // переходы между корпусами вплотную/через окно
 	SingleClassDay        int // «форточка» — всего 1 пара в день у группы
-	PracticeBeforeLecture int // практика раньше лекции по предмету (если включено)
+	PracticeBeforeLecture int // практика раньше лекции по предмету в неделе (если включено)
+	LecturePracticeApart  int // практика не в день лекции или раньше неё (если включено)
 	SubjectSpread         int // пары одного плана разнесены по разным дням (если включено)
 }
 
@@ -114,7 +115,7 @@ type FitnessBreakdown struct {
 func (b FitnessBreakdown) Total() int {
 	return b.Saturday + b.GroupDayOverload + b.GroupLongDay + b.GroupTooFewDays +
 		b.TeacherDayOverload + b.TeacherConcentration + b.GroupGaps + b.TeacherGaps +
-		b.BuildingTransitions + b.SingleClassDay + b.PracticeBeforeLecture + b.SubjectSpread
+		b.BuildingTransitions + b.SingleClassDay + b.PracticeBeforeLecture + b.LecturePracticeApart + b.SubjectSpread
 }
 
 // QualityStats — показатели расписания в «человеческих» единицах (штуки, пары),
@@ -134,6 +135,9 @@ type SolverPreferences struct {
 	// стоять в неделе раньше лекции по нему. Лекция и практика — разные учебные планы,
 	// связь между ними — название предмета без пометки типа в скобках.
 	LectureBeforePractice bool `json:"lecture_before_practice"`
+	// LecturePracticeSameDay — практика и лабораторная по предмету у группы стоят в тот же
+	// день, что и лекция по нему, и после неё: лекция, потом практика.
+	LecturePracticeSameDay bool `json:"lecture_practice_same_day"`
 	// SameSubjectSameDay — несколько пар одного плана (например, две лабораторные
 	// в неделю) у группы ставить в один день, а не разносить по неделе.
 	SameSubjectSameDay bool `json:"same_subject_same_day"`
