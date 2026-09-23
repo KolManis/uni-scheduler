@@ -307,6 +307,11 @@ func (s *Service) Breakdown(sched *domain.Schedule) domain.FitnessBreakdown {
 	return solver.CalculateFitnessBreakdown(sched.Assignments, domain.InputData{})
 }
 
+// Quality — показатели расписания в штуках (окна, одиночные дни, суббота).
+func (s *Service) Quality(sched *domain.Schedule) domain.QualityStats {
+	return solver.CalculateQuality(sched.Assignments)
+}
+
 // Delete удаляет расписание по ID.
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	if id <= 0 {

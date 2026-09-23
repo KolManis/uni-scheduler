@@ -37,6 +37,7 @@ type scheduleViewData struct {
 	Schedule     *domain.Schedule
 	DayGroups    []dayGroup
 	Breakdown    domain.FitnessBreakdown
+	Quality      domain.QualityStats
 	Teachers     []domain.Teacher
 	Rooms        []domain.Room
 	Groups       []domain.Group
@@ -289,6 +290,7 @@ func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id in
 	renderStatus(w, r, status, h.pages["schedules_view.html"], scheduleViewData{
 		Schedule: sched, DayGroups: buildDayGroups(sched),
 		Breakdown: h.svc.Breakdown(sched),
+		Quality:   h.svc.Quality(sched),
 		Teachers:  data.Teachers, Rooms: data.Rooms, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
 		Error: errMsg, Success: successMsg,
 	})

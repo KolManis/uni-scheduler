@@ -114,6 +114,16 @@ func (b FitnessBreakdown) Total() int {
 		b.BuildingTransitions + b.SingleClassDay
 }
 
+// QualityStats — показатели расписания в «человеческих» единицах (штуки, пары),
+// а не в баллах штрафа. По ним видно, что именно плохо, без знания весов fitness.
+type QualityStats struct {
+	GroupGaps            int // окон у групп (пустых пар между занятиями за день)
+	SingleClassDays      int // дней, где у группы ровно одна пара
+	SaturdayPairs        int // пар в субботу
+	MaxGroupPairsPerDay  int // максимум пар в день у одной группы
+	MaxTeacherPairsInDay int // максимум пар в день у одного преподавателя
+}
+
 type InputData struct {
 	Buildings    []Building    `json:"buildings"`
 	Departments  []Department  `json:"departments"`

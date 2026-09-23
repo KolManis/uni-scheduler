@@ -17,6 +17,19 @@
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 {{if .Success}}<div class="banner success">{{.Success}}</div>{{end}}
 
+<div class="card" style="margin-bottom:12px;">
+  <h2 style="margin-top:0;">Качество расписания</h2>
+  <table>
+    <tbody>
+      <tr><td>Окна у групп</td><td class="{{if .Quality.GroupGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.GroupGaps}}</td></tr>
+      <tr><td>Дни с одной парой у группы</td><td class="{{if .Quality.SingleClassDays}}score-bad{{else}}score-good{{end}}">{{.Quality.SingleClassDays}}</td></tr>
+      <tr><td>Пар в субботу</td><td class="{{if .Quality.SaturdayPairs}}score-bad{{else}}score-good{{end}}">{{.Quality.SaturdayPairs}}</td></tr>
+      <tr><td>Максимум пар в день у группы</td><td>{{.Quality.MaxGroupPairsPerDay}}</td></tr>
+      <tr><td>Максимум пар в день у преподавателя</td><td>{{.Quality.MaxTeacherPairsInDay}}</td></tr>
+    </tbody>
+  </table>
+</div>
+
 <details class="card" style="margin-bottom:20px;">
   <summary style="cursor:pointer; font-weight:600;">Из чего складывается score ({{.Schedule.Score}})</summary>
   <table style="margin-top:12px;">
