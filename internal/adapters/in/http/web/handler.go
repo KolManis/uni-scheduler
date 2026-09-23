@@ -75,6 +75,7 @@ func NewHandler(input inputLoader, ref refWriter, svc scheduleService) *Handler 
 			"teachers_list.html", "teachers_form.html",
 			"subject_plans_list.html", "subject_plans_form.html",
 			"schedules_list.html", "schedules_view.html", "schedules_assignment_form.html", "schedules_groups_view.html",
+			"help.html",
 		),
 	}
 }
@@ -128,6 +129,8 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	ui.HandleFunc("/subject-plans/{id}", h.subjectPlansUpdate).Methods(http.MethodPut)
 	ui.HandleFunc("/subject-plans/{id}", h.subjectPlansDelete).Methods(http.MethodDelete)
 
+	ui.HandleFunc("/help", h.help).Methods(http.MethodGet)
+
 	ui.HandleFunc("/schedules", h.schedulesList).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/generate", h.schedulesGenerate).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}", h.schedulesView).Methods(http.MethodGet)
@@ -179,4 +182,8 @@ func formStrings(r *http.Request, key string) []string {
 		return nil
 	}
 	return r.Form[key]
+}
+
+func (h *Handler) help(w http.ResponseWriter, r *http.Request) {
+	render(w, r, h.pages["help.html"], nil)
 }
