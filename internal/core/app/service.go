@@ -106,6 +106,11 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		solverBudget = 30 * time.Second
 	}
 
+	// Солвер и сохранение работают с context.Background() — не зависят от того,
+	// открыта ли ещё вкладка пользователя. Если пользователь ушёл со страницы,
+	// запрос отменяется, но генерация продолжается на сервере, расписание всё равно
+	// оказывается в БД и появится в списке при следующем открытии.
+	dataForSolver := *data
 	go func() {
 		var result *domain.Schedule
 		var solveErr error
@@ -113,16 +118,27 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		improve := solver.ImproveAlgorithm(in.ImproveAlgo)
 		switch in.SolverType {
 		case "subject":
-			result, solveErr = solver.SolveParallel(*data, in.MaxIterations, 4)
+			result, solveErr = solver.SolveParallel(dataForSolver, in.MaxIterations, 4)
 		default:
 			starts := in.ParallelStarts
 			if starts <= 1 {
-				result, solveErr = solver.SolveTeacherWithBudget(*data, in.MaxIterations, improve, 0, solverBudget)
+				result, solveErr = solver.SolveTeacherWithBudget(dataForSolver, in.MaxIterations, improve, 0, solverBudget)
 			} else {
-				result, solveErr = solver.SolveTeacherMultiStart(*data, in.MaxIterations, improve, starts, solverBudget)
+				result, solveErr = solver.SolveTeacherMultiStart(dataForSolver, in.MaxIterations, improve, starts, solverBudget)
 			}
 		}
-		ch <- solveResult{result, solveErr}
+		if solveErr != nil {
+			ch <- solveResult{err: solveErr}
+			return
+		}
+		result.Name = in.Name
+		result.Unplaced = solver.ComputeUnplaced(result.Assignments, dataForSolver)
+		saved, err := s.outputRepo.SaveSchedule(context.Background(), result)
+		if err != nil {
+			ch <- solveResult{err: fmt.Errorf("save schedule: %w", err)}
+			return
+		}
+		ch <- solveResult{sched: saved}
 	}()
 
 	select {
@@ -132,13 +148,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		if res.err != nil {
 			return nil, res.err
 		}
-		res.sched.Name = in.Name
-		res.sched.Unplaced = solver.ComputeUnplaced(res.sched.Assignments, *data)
-		saved, err := s.outputRepo.SaveSchedule(ctx, res.sched)
-		if err != nil {
-			return nil, fmt.Errorf("save schedule: %w", err)
-		}
-		return saved, nil
+		return res.sched, nil
 	}
 }
 
@@ -209,31 +219,50 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 		solverBudget = 30 * time.Second
 	}
 
+	// Каждая горутина сохраняет своё расписание сама, с context.Background(): даже
+	// если пользователь ушёл со страницы и запрос отменён, генерация продолжается
+	// и результаты попадают в БД — пользователь увидит их в списке позже.
 	// При «все методы» игнорируем ParallelStarts: 5 методов уже дают 5 параллельных
 	// горутин. Если умножать на 3-8 стартов внутри каждого, получаем 15-40 горутин,
 	// конкурирующих за ~4-8 ядер CPU.
+	dataForSolver := *data
+	baseName := in.Name
 	for i, m := range methods {
 		go func(idx int, algo solver.ImproveAlgorithm, suffix string) {
-			sched, solveErr := solver.SolveTeacherWithBudget(*data, in.MaxIterations, algo, 0, solverBudget)
-			results[idx] = genResult{sched: sched, err: solveErr}
+			sched, solveErr := solver.SolveTeacherWithBudget(dataForSolver, in.MaxIterations, algo, 0, solverBudget)
+			if solveErr != nil {
+				results[idx] = genResult{err: solveErr}
+				done <- idx
+				return
+			}
+			sched.Name = baseName + " — " + suffix
+			sched.Unplaced = solver.ComputeUnplaced(sched.Assignments, dataForSolver)
+			out, err := s.outputRepo.SaveSchedule(context.Background(), sched)
+			if err != nil {
+				results[idx] = genResult{err: fmt.Errorf("save %s: %w", suffix, err)}
+				done <- idx
+				return
+			}
+			results[idx] = genResult{sched: out}
 			done <- idx
 		}(i, m.algo, m.suffix)
 	}
 
-	// Ждём завершения всех горутин ЛИБО общего таймаута.
+	// Ждём завершения всех горутин, пока клиент нас слушает. Если solveCtx отменён
+	// (клиент ушёл или сработал общий таймаут), прекращаем ждать — но горутины
+	// продолжают работать в фоне и сами дописывают результат в БД.
 	completed := 0
 	for completed < len(methods) {
 		select {
 		case <-solveCtx.Done():
-			// Дождёмся уже запущенных горутин снаружи цикла: они всё равно допишут в results.
-			// Но мы прекращаем ждать новых — то, что успело, то и сохраним.
 			completed = len(methods)
 		case <-done:
 			completed++
 		}
 	}
 
-	// Сохраняем всё, что успело сойтись.
+	// То, что успело сойтись К МОМЕНТУ ВОЗВРАТА, — возвращаем клиенту как success.
+	// Остальное успеет сохраниться в фоне.
 	var saved []*domain.Schedule
 	var firstErr error
 	for i, r := range results {
@@ -244,18 +273,9 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 			continue
 		}
 		if r.sched == nil {
-			continue // горутина не успела до таймаута
-		}
-		r.sched.Name = in.Name + " — " + methods[i].suffix
-		r.sched.Unplaced = solver.ComputeUnplaced(r.sched.Assignments, *data)
-		out, err := s.outputRepo.SaveSchedule(ctx, r.sched)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("save %s: %w", methods[i].suffix, err)
-			}
 			continue
 		}
-		saved = append(saved, out)
+		saved = append(saved, r.sched)
 	}
 	if len(saved) == 0 {
 		if firstErr != nil {
