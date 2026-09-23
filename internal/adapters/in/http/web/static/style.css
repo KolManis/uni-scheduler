@@ -126,6 +126,18 @@ input[type=text], input[type=number], select, textarea {
   font-size: 14px;
   background: #fff;
   color: var(--text);
+  box-sizing: border-box;
+}
+
+/* У select нужен дополнительный запас справа под системную стрелку,
+   иначе длинные значения (например «Все методы — сравнить») наезжают на неё. */
+select {
+  padding-right: 28px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23666' d='M0 0l5 6 5-6z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
 
 .checkbox-grid {
@@ -181,7 +193,7 @@ input[type=text], input[type=number], select, textarea {
 .muted { color: var(--muted); font-size: 13px; }
 
 .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.form-row .field { flex: 1; min-width: 160px; }
+.form-row .field { flex: 1 1 240px; min-width: 240px; }
 
 .score-good { color: var(--success-text); font-weight: 600; }
 .score-bad { color: var(--danger); font-weight: 600; }
