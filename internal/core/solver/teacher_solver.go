@@ -85,6 +85,7 @@ func SolveTeacherWithSeed(input domain.InputData, maxIter int, improve ImproveAl
 // seed == 0 — детерминированное построение. Ненулевой seed перемешивает преподавателей
 // и предметы в пределах одной и той же приоритетной группы.
 func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64, budget time.Duration) (*domain.Schedule, error) {
+	input = normalizeInput(input)
 	state := newTeacherState(input)
 
 	var rng *rand.Rand
