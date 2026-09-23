@@ -65,6 +65,7 @@ func renderSchedule(assignments []domain.Assignment) string {
 func TestGolden_FitnessBreakdown(t *testing.T) {
 	// 4 окна у групп: G1 пн 1–3, G2 чт 2–5 (два), G3 пт 2–4.
 	// Суббота: 200 за сам факт + 8000 за единственную пару у G2 в этот день.
+	// SingleClassDay: G2 в среду (1 пара) и G2 в субботу (1 пара) — 2 дня × 8000.
 	want := domain.FitnessBreakdown{
 		Saturday:             8200,
 		GroupDayOverload:     0,
@@ -75,7 +76,7 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 		GroupGaps:            40000,
 		TeacherGaps:          180,
 		BuildingTransitions:  2000,
-		SingleClassDay:       50,
+		SingleClassDay:       16000,
 	}
 
 	got := CalculateFitnessBreakdown(goldenAssignments(), domain.InputData{})
@@ -83,24 +84,30 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 	if got != want {
 		t.Errorf("разбивка штрафа изменилась\nполучено: %+v\nожидалось: %+v", got, want)
 	}
-	if got.Total() != 50630 {
-		t.Errorf("итоговый штраф: получено %d, ожидалось 50630", got.Total())
+	if got.Total() != 66580 {
+		t.Errorf("итоговый штраф: получено %d, ожидалось 66580", got.Total())
 	}
 }
 
 func TestGolden_Converge(t *testing.T) {
+	// После усиления штрафа SingleClassDay до 8000 конверджер группирует пары в дни
+	// с несколькими занятиями, даже ценой перегрузки дня или окна: 4 одиноких дня
+	// (32000) обходятся дороже одного окна (10000) + перегрузки (~1500).
+	// G1: все 4 пары уходят в понедельник вместо трёх дней Пн-Вт-Пт.
+	// G2: сжимается в среду+четверг, суббота освобождается.
+	// G3: как и было, только пятница.
 	want := strings.Join([]string{
-		"G1|T1|tuesday|1|always",
-		"G1|T1|tuesday|2|always",
-		"G1|T2|friday|4|always",
+		"G1|T1|monday|2|always",
+		"G1|T1|monday|3|always",
+		"G1|T2|monday|4|always",
 		"G1|T3|monday|1|always",
-		"G2|T1|friday|2|always",
 		"G2|T1|thursday|5|always",
-		"G2|T2|wednesday|3|always",
+		"G2|T1|wednesday|3|always",
+		"G2|T2|thursday|4|always",
 		"G2|T3|wednesday|4|always",
-		"G3|T2|friday|3|odd",
-		"G3|T3|friday|1|always",
+		"G3|T2|friday|2|odd",
 		"G3|T3|friday|2|even",
+		"G3|T3|friday|4|always",
 	}, "\n")
 
 	got := converge(goldenAssignments(), domain.InputData{}, time.Now().Add(10*time.Second), nil)
@@ -108,8 +115,8 @@ func TestGolden_Converge(t *testing.T) {
 	if gotRender := renderSchedule(got); gotRender != want {
 		t.Errorf("результат сходимости изменился\nполучено:\n%s\n\nожидалось:\n%s", gotRender, want)
 	}
-	if score := calculateFitness(got, domain.InputData{}); score != 100 {
-		t.Errorf("штраф после сходимости: получено %d, ожидалось 100", score)
+	if score := calculateFitness(got, domain.InputData{}); score != 13660 {
+		t.Errorf("штраф после сходимости: получено %d, ожидалось 13660", score)
 	}
 	if !checkHardConstraints(got, nil) {
 		t.Error("сходимость нарушила жёсткие ограничения")

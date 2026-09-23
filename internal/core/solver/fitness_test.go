@@ -75,12 +75,14 @@ func TestCalculateFitness_GapPenalty(t *testing.T) {
 }
 
 func TestCalculateFitness_SinglePairWindow(t *testing.T) {
-	// Одна пара в день — форточка +25
+	// Одна пара в день у группы — потерянный день, штраф 8000.
+	// Значение выбрано таким, чтобы алгоритм активно избегал одиноких дней
+	// (сопоставимо со штрафом за одинокую субботу).
 	assignments := []domain.Assignment{
 		makeAssignment("G1", "T1", domain.Wednesday, 3, domain.Always),
 	}
 	score := calculateFitness(assignments, emptyInput)
-	if score != 25 {
-		t.Fatalf("expected single-pair penalty 25, got %d", score)
+	if score != 8000 {
+		t.Fatalf("expected single-pair penalty 8000, got %d", score)
 	}
 }
