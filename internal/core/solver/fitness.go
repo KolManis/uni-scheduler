@@ -6,6 +6,9 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
+// teacherMaxPairsPerDay — сколько пар в день у преподавателя считается нормой.
+const teacherMaxPairsPerDay = 4
+
 // CalculateFitness — публичная обёртка для использования из других пакетов.
 func CalculateFitness(assignments []domain.Assignment, input domain.InputData) int {
 	return calculateFitness(assignments, input)
@@ -16,7 +19,7 @@ func calculateFitness(assignments []domain.Assignment, input domain.InputData) i
 }
 
 // CalculateFitnessBreakdown — та же логика, что calculateFitness, но с разбивкой по категориям.
-func CalculateFitnessBreakdown(assignments []domain.Assignment, _ domain.InputData) domain.FitnessBreakdown {
+func CalculateFitnessBreakdown(assignments []domain.Assignment, input domain.InputData) domain.FitnessBreakdown {
 	var b domain.FitnessBreakdown
 
 	groupSlots := make(map[string]map[domain.Day][]int)
@@ -125,13 +128,13 @@ func CalculateFitnessBreakdown(assignments []domain.Assignment, _ domain.InputDa
 		}
 	}
 
-	// 3b. Штраф за неравномерное распределение у преподавателей:
-	// дни с 3+ парами очень дорогие, а пустые пятницы/четверги — значит нагрузка не размазана.
+	// 3b. Нагрузка преподавателей. 3–4 пары в день — норма; каждая пара сверх
+	// teacherMaxPairsPerDay — перегрузка. Раньше штраф начинался с 3-й пары и вместе
+	// со штрафами групп растаскивал занятия по неделе, порождая дни с одной парой.
 	for _, daySlots := range teacherSlots {
-		// Штраф за переполненный день (>2 пар у одного преподавателя)
 		for _, slots := range daySlots {
-			if len(slots) > 2 {
-				b.TeacherDayOverload += (len(slots) - 2) * 350
+			if len(slots) > teacherMaxPairsPerDay {
+				b.TeacherDayOverload += (len(slots) - teacherMaxPairsPerDay) * 3000
 			}
 		}
 		// Штраф за концентрацию: если кол-во активных дней < 3 при >=4 парах в неделю
@@ -177,8 +180,18 @@ func CalculateFitnessBreakdown(assignments []domain.Assignment, _ domain.InputDa
 		day domain.Day
 		num int
 	}
+	// Спортивные места (зал, стадион) в переходах не участвуют — см. isSportRoomType.
+	sportRooms := make(map[string]bool)
+	for _, r := range input.Rooms {
+		if isSportRoomType(r.Type) {
+			sportRooms[r.ID] = true
+		}
+	}
 	groupBuilding := make(map[gSlotKey]string, len(assignments)*2)
 	for _, a := range assignments {
+		if sportRooms[a.RoomID] {
+			continue
+		}
 		for _, gid := range a.GroupIDs {
 			k := gSlotKey{gid, a.TimeSlot.Day(), a.TimeSlot.PairNum()}
 			if groupBuilding[k] == "" {

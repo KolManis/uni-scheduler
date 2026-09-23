@@ -288,20 +288,31 @@ func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.Subje
 			groupLoadPenalty += 1500
 		}
 
-		// Штраф за переход между корпусами
-		if newBuilding != "" {
+		// Штраф за переход между корпусами. Физкультура не штрафуется: переход в зал
+		// или на стадион для неё обычен и заложен в само занятие.
+		if newBuilding != "" && !isSportRoomType(subject.RequiresRoomType) {
 			buildingPenalty += calcBuildingTransitionPenalty(state, gid, day, slot.PairNum(), newBuilding)
 		}
 	}
 
-	// Штраф за перегрузку дня у преподавателя
+	// Нагрузка преподавателя за день: 3–4 пары — норма, лёгкое предпочтение разнести
+	// занятия по неделе. Пятая пара — перегрузка, её избегаем почти любой ценой.
 	teacherDayPairs := teacherPairsInDay(state, teacherID, day)
-	teacherSpread := len(teacherDayPairs) * 400
+	teacherSpread := len(teacherDayPairs) * 100
+	if len(teacherDayPairs) >= teacherMaxPairsPerDay {
+		teacherSpread += 20000
+	}
 
 	// Глобальный штраф за перегруженный день
 	globalSpread := totalPairsInDay(state, day) * 20
 
 	return satPenalty + gapPenalty*10000 + groupLoadPenalty + teacherSpread + globalSpread + buildingPenalty
+}
+
+// isSportRoomType — спортзал или открытая площадка. Физкультура проходит там, где решит
+// преподаватель, и переход на неё из учебного корпуса не считается нарушением.
+func isSportRoomType(roomType string) bool {
+	return roomType == "gym" || roomType == "outdoor"
 }
 
 // calcBuildingTransitionPenalty начисляет штраф если новое занятие (pairNum, building)
@@ -319,7 +330,7 @@ func calcBuildingTransitionPenalty(state *teacherState, gid string, day domain.D
 				break
 			}
 		}
-		if !found || a.BuildingID == newBuilding {
+		if !found || a.BuildingID == newBuilding || isSportRoomType(state.roomMap[a.RoomID].Type) {
 			continue
 		}
 		diff := pairNum - a.TimeSlot.PairNum()

@@ -21,20 +21,103 @@ func makeAssignment(groupID, teacherID string, day domain.Day, pair int, parity 
 
 var emptyInput = domain.InputData{}
 
-func TestCalculateFitness_NoGaps_OnlyTeacherOverload(t *testing.T) {
-	// Пары подряд: 1,2,3 — нет окон, нет субботы, один преподаватель
-	assignments := []domain.Assignment{
-		makeAssignment("G1", "T1", domain.Monday, 1, domain.Always),
-		makeAssignment("G1", "T1", domain.Monday, 2, domain.Always),
-		makeAssignment("G1", "T1", domain.Monday, 3, domain.Always),
+func TestCalculateFitness_BuildingTransitionSkipsSport(t *testing.T) {
+	input := domain.InputData{
+		Rooms: []domain.Room{
+			{ID: "R-main", BuildingID: "MAIN", Type: "lecture"},
+			{ID: "R-other", BuildingID: "OTHER", Type: "lecture"},
+			{ID: "R-stadium", BuildingID: "STADIUM", Type: "outdoor"},
+			{ID: "R-gym", BuildingID: "OTHER", Type: "gym"},
+		},
 	}
-	score := calculateFitness(assignments, emptyInput)
-	// Нет окон у группы → SC4=0
-	// Нет окон у препода → SC5=0
-	// Препод с 3 парами в день → SC3b: (3-2)*350 = 350
-	// Итого: 350
-	if score != 350 {
-		t.Fatalf("expected 350 (teacher overload 3b), got %d", score)
+	tests := []struct {
+		name       string
+		secondRoom string
+		secondBldg string
+		want       int
+	}{
+		{
+			name:       "лекция и следом пара в другом учебном корпусе — штраф за переход",
+			secondRoom: "R-other",
+			secondBldg: "OTHER",
+			want:       2000,
+		},
+		{
+			name:       "лекция и следом физкультура на стадионе — без штрафа",
+			secondRoom: "R-stadium",
+			secondBldg: "STADIUM",
+			want:       0,
+		},
+		{
+			name:       "лекция и следом физкультура в спортзале другого корпуса — без штрафа",
+			secondRoom: "R-gym",
+			secondBldg: "OTHER",
+			want:       0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assignments := []domain.Assignment{
+				{
+					GroupIDs:   []string{"G1"},
+					TeacherID:  "T1",
+					RoomID:     "R-main",
+					BuildingID: "MAIN",
+					TimeSlot:   domain.MustNewTimeSlot(domain.Monday, 1),
+					Parity:     domain.Always,
+				},
+				{
+					GroupIDs:   []string{"G1"},
+					TeacherID:  "T2",
+					RoomID:     tt.secondRoom,
+					BuildingID: tt.secondBldg,
+					TimeSlot:   domain.MustNewTimeSlot(domain.Monday, 2),
+					Parity:     domain.Always,
+				},
+			}
+			got := CalculateFitnessBreakdown(assignments, input).BuildingTransitions
+			if got != tt.want {
+				t.Errorf("BuildingTransitions: получено %d, ожидалось %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCalculateFitness_TeacherDayOverload(t *testing.T) {
+	tests := []struct {
+		name  string
+		pairs int
+		want  int
+	}{
+		{
+			name:  "3 пары в день у преподавателя — норма, без штрафа",
+			pairs: 3,
+			want:  0,
+		},
+		{
+			name:  "4 пары в день у преподавателя — норма, без штрафа",
+			pairs: 4,
+			want:  0,
+		},
+		{
+			name:  "5 пар в день у преподавателя — перегрузка на одну пару",
+			pairs: 5,
+			want:  3000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var assignments []domain.Assignment
+			for pair := 1; pair <= tt.pairs; pair++ {
+				assignments = append(assignments, makeAssignment("G1", "T1", domain.Monday, pair, domain.Always))
+			}
+			got := CalculateFitnessBreakdown(assignments, emptyInput).TeacherDayOverload
+			if got != tt.want {
+				t.Errorf("TeacherDayOverload: получено %d, ожидалось %d", got, tt.want)
+			}
+		})
 	}
 }
 
