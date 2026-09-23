@@ -191,16 +191,14 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	results := make([]genResult, len(methods))
 	done := make(chan int, len(methods))
 
+	// При «все методы» игнорируем ParallelStarts: 5 методов уже дают 5 параллельных
+	// горутин. Если умножать на 3-8 стартов внутри каждого, получаем 15-40 горутин,
+	// конкурирующих за ~4-8 ядер CPU. Каждая метаэвристика с таймером 60 сек не
+	// успевает за общий wall-clock, converge не досходится, score деградирует в 5-7 раз
+	// (проверено: 8 стартов × 5 методов = score 170k-213k против одиночных ~30k).
 	for i, m := range methods {
 		go func(idx int, algo solver.ImproveAlgorithm, suffix string) {
-			var sched *domain.Schedule
-			var solveErr error
-			starts := in.ParallelStarts
-			if starts <= 1 {
-				sched, solveErr = solver.SolveTeacher(*data, in.MaxIterations, algo)
-			} else {
-				sched, solveErr = solver.SolveTeacherMultiStart(*data, in.MaxIterations, algo, starts)
-			}
+			sched, solveErr := solver.SolveTeacher(*data, in.MaxIterations, algo)
 			results[idx] = genResult{sched: sched, err: solveErr}
 			done <- idx
 		}(i, m.algo, m.suffix)
