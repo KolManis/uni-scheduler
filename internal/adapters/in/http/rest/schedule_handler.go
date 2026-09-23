@@ -40,11 +40,11 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.svc.Generate(r.Context(), app.GenerateInput{
-		Name:          req.Name,
-		MaxIterations: req.MaxIterations,
-		SolverType:    req.SolverType,
-		TimeoutSec:    req.TimeoutSec,
-		SemesterHalf:  req.SemesterHalf,
+		Name:           req.Name,
+		MaxIterations:  req.MaxIterations,
+		SolverType:     req.SolverType,
+		TimeoutSec:     req.TimeoutSec,
+		SemesterHalf:   req.SemesterHalf,
 		ImproveAlgo:    req.ImproveAlgo,
 		ParallelStarts: req.ParallelStarts,
 		Preferences: domain.SolverPreferences{

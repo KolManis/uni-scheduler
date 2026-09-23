@@ -47,8 +47,8 @@ func MustNewTimeSlot(day Day, pairNum int) TimeSlot {
 	return slot
 }
 
-func (s TimeSlot) Day() Day      { return s.day }
-func (s TimeSlot) PairNum() int  { return s.pairNum }
+func (s TimeSlot) Day() Day       { return s.day }
+func (s TimeSlot) PairNum() int   { return s.pairNum }
 func (s TimeSlot) String() string { return fmt.Sprintf("%s:%d", s.day, s.pairNum) }
 
 func (s TimeSlot) MarshalJSON() ([]byte, error) {

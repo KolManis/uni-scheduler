@@ -72,13 +72,13 @@ type UnplacedItem struct {
 }
 
 type Schedule struct {
-	ID          int64          `json:"id,omitempty"`
-	Name        string         `json:"name"`
-	Assignments []Assignment   `json:"assignments"`
-	Score       int            `json:"score"`
-	Unplaced    []UnplacedItem `json:"unplaced,omitempty"`
+	ID          int64             `json:"id,omitempty"`
+	Name        string            `json:"name"`
+	Assignments []Assignment      `json:"assignments"`
+	Score       int               `json:"score"`
+	Unplaced    []UnplacedItem    `json:"unplaced,omitempty"`
 	Options     SolverPreferences `json:"options"`
-	CreatedAt   time.Time      `json:"created_at,omitempty"`
+	CreatedAt   time.Time         `json:"created_at,omitempty"`
 }
 
 // ScheduleSummary — расписание без тела assignments: для списка расписаний.
@@ -96,16 +96,16 @@ type ScheduleSummary struct {
 // Считается солвером, но описывает качество расписания — поэтому живёт в домене,
 // как и UnplacedItem.
 type FitnessBreakdown struct {
-	Saturday             int // суббота + одиночная суббота у группы
-	GroupDayOverload     int // перегрузка дня у группы (4+ / 5+ пар)
-	GroupLongDay         int // длинный день (>4 пар подряд)
-	GroupTooFewDays      int // мало дней при большой нагрузке (группы)
-	TeacherDayOverload   int // день >2 пар у преподавателя
-	TeacherConcentration int // <3 активных дней у преподавателя при загрузке
-	GroupGaps            int // окна у групп (дороже всего — 10000 за окно)
-	TeacherGaps          int // окна у преподавателей
-	BuildingTransitions  int // переходы между корпусами вплотную/через окно
-	SingleClassDay       int // «форточка» — всего 1 пара в день у группы
+	Saturday              int // суббота + одиночная суббота у группы
+	GroupDayOverload      int // перегрузка дня у группы (4+ / 5+ пар)
+	GroupLongDay          int // длинный день (>4 пар подряд)
+	GroupTooFewDays       int // мало дней при большой нагрузке (группы)
+	TeacherDayOverload    int // день >2 пар у преподавателя
+	TeacherConcentration  int // <3 активных дней у преподавателя при загрузке
+	GroupGaps             int // окна у групп (дороже всего — 10000 за окно)
+	TeacherGaps           int // окна у преподавателей
+	BuildingTransitions   int // переходы между корпусами вплотную/через окно
+	SingleClassDay        int // «форточка» — всего 1 пара в день у группы
 	PracticeBeforeLecture int // практика раньше лекции по предмету (если включено)
 	SubjectSpread         int // пары одного плана разнесены по разным дням (если включено)
 }
@@ -140,11 +140,11 @@ type SolverPreferences struct {
 }
 
 type InputData struct {
-	Buildings    []Building    `json:"buildings"`
-	Departments  []Department  `json:"departments"`
-	Groups       []Group       `json:"groups"`
-	Teachers     []Teacher     `json:"teachers"`
-	Rooms        []Room        `json:"rooms"`
-	SubjectPlans []SubjectPlan `json:"subject_plans"`
+	Buildings    []Building        `json:"buildings"`
+	Departments  []Department      `json:"departments"`
+	Groups       []Group           `json:"groups"`
+	Teachers     []Teacher         `json:"teachers"`
+	Rooms        []Room            `json:"rooms"`
+	SubjectPlans []SubjectPlan     `json:"subject_plans"`
 	Preferences  SolverPreferences `json:"-"`
 }

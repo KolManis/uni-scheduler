@@ -23,8 +23,8 @@ type GenerateInput struct {
 	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
 	// "second" → исключить планы с semester_half="first" (2-я половина, лекции закончились)
 	// "" / "full" → всё без фильтрации (по умолчанию)
-	ImproveAlgo    string // "hillclimb" (default) | "sa" | "tabu" | "ga" | "lns"
-	ParallelStarts int    // 0/1 — один запуск (по умолчанию), N>1 — многостартовый параллельный поиск
+	ImproveAlgo    string                   // "hillclimb" (default) | "sa" | "tabu" | "ga" | "lns"
+	ParallelStarts int                      // 0/1 — один запуск (по умолчанию), N>1 — многостартовый параллельный поиск
 	Preferences    domain.SolverPreferences // необязательные правила, по умолчанию выключены
 }
 

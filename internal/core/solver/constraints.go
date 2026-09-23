@@ -53,7 +53,6 @@ func isRoomSuitable(room domain.Room, requiredType string) bool {
 	return room.Type == requiredType
 }
 
-
 func isBuildingAllowedForGroup(buildingID string, group domain.Group) bool {
 	if len(group.BuildingIDs) == 0 {
 		return true
