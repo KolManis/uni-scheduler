@@ -21,7 +21,10 @@ docs/harness-engineering-guide.md
 # Документы, данные и рабочие материалы — не часть кода приложения
 *.docx
 *.xlsx
-docs/
+# Из документации в git только спецификация и архитектурные решения
+docs/*
+!docs/spec/
+!docs/adr/
 diagrams/
 images/
 progress.md
