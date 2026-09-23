@@ -35,9 +35,13 @@ type PatchRequest struct {
 	Parity   domain.Parity
 }
 
+// ConflictTeacherUnavailable — слот отмечен преподавателем как недоступный (HC7).
+// ConflictWith у такого конфликта равен -1: он не с другим занятием.
+const ConflictTeacherUnavailable = "teacher_unavailable"
+
 // ConflictError описывает нарушение жёсткого ограничения при PATCH.
 type ConflictError struct {
-	Type         string `json:"type"` // "teacher_busy" | "group_busy" | "room_busy"
+	Type         string `json:"type"` // "teacher_busy" | "group_busy" | "room_busy" | "teacher_unavailable"
 	ResourceID   string `json:"resource_id"`
 	ConflictWith int    `json:"conflict_with"` // индекс конфликтующего assignment
 }
@@ -348,8 +352,19 @@ func (s *Service) PatchAssignment(ctx context.Context, schedID int64, idx int, r
 		sched.Assignments[idx].Parity = req.Parity
 	}
 
-	// Проверяем HC1–HC3 для изменённого назначения
+	data, err := s.inputRepo.LoadInput(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load input: %w", err)
+	}
+
+	// HC7: преподаватель доступен в новом слоте. Перенос меняет именно время,
+	// поэтому занятие может попасть в слот, отмеченный преподавателем как недоступный.
 	modified := sched.Assignments[idx]
+	if isTeacherUnavailable(data.Teachers, modified.TeacherID, modified.TimeSlot) {
+		return nil, &ConflictError{Type: ConflictTeacherUnavailable, ResourceID: modified.TeacherID, ConflictWith: -1}
+	}
+
+	// HC1–HC3: преподаватель, группа и аудитория не заняты другим занятием
 	for j, a := range sched.Assignments {
 		if j == idx {
 			continue
@@ -362,10 +377,6 @@ func (s *Service) PatchAssignment(ctx context.Context, schedID int64, idx int, r
 	}
 
 	// Пересчитываем score
-	data, err := s.inputRepo.LoadInput(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load input: %w", err)
-	}
 	data.Preferences = sched.Options
 	sched.Score = solver.CalculateFitness(sched.Assignments, *data)
 
@@ -430,4 +441,20 @@ func validateSolverType(solverType string) error {
 		return nil
 	}
 	return fmt.Errorf("%w: solver_type %q не поддерживается, доступен только \"teacher\"", ErrInvalidInput, solverType)
+}
+
+// isTeacherUnavailable — слот входит в недоступные слоты преподавателя.
+func isTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot) bool {
+	for _, t := range teachers {
+		if t.ID != teacherID {
+			continue
+		}
+		for _, s := range t.UnavailableSlots {
+			if s == slot {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }

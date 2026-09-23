@@ -361,6 +361,9 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 }
 
 func conflictMessage(c *app.ConflictError) string {
+	if c.Type == app.ConflictTeacherUnavailable {
+		return "Конфликт: преподаватель отметил это время как недоступное"
+	}
 	var what string
 	switch c.Type {
 	case "teacher_busy":
