@@ -14,13 +14,7 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations/0001_init.up.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
-      - ./migrations/0003_add_semester_half_and_required_building.up.sql:/docker-entrypoint-initdb.d/003_add_semester_half_and_required_building.sql:ro
-      - ./migrations/0004_add_unplaced_to_schedules.up.sql:/docker-entrypoint-initdb.d/004_add_unplaced_to_schedules.sql:ro
-      - ./migrations/0005_add_schedule_options.up.sql:/docker-entrypoint-initdb.d/005_add_schedule_options.sql:ro
-      - ./migrations/0006_add_teacher_external_pairs.up.sql:/docker-entrypoint-initdb.d/006_add_teacher_external_pairs.sql:ro
-      - ./migrations/0007_add_teacher_undesired_slots.up.sql:/docker-entrypoint-initdb.d/007_add_teacher_undesired_slots.sql:ro
-      - ./migrations/0008_add_schedule_run.up.sql:/docker-entrypoint-initdb.d/008_add_schedule_run.sql:ro
+      # Схему создаёт и обновляет приложение при старте (миграции встроены, goose).
 
   app:
     build:

@@ -40,6 +40,12 @@ func main() {
 	}
 	defer pool.Close()
 
+	// Схема базы приводится к текущей версии до приёма запросов (миграции встроены в бинарник).
+	if err := postgres.Migrate(ctx, pool, logger); err != nil {
+		logger.Error("migrate db", "error", err)
+		os.Exit(1)
+	}
+
 	inputRepo := postgres.NewInputRepository(pool)
 	outputRepo := postgres.NewOutputRepository(pool)
 	importRepo := postgres.NewImportRepository(pool)

@@ -89,14 +89,13 @@ migrations/                    схема БД
 make up          # собрать образ и запустить postgres + приложение
 make seed        # залить справочники из data/snapshots (очищает справочники!)
 make demo        # запуск из уже собранного образа, без интернета
-make db-migrate  # накатить новые миграции, данные сохраняются
 make test        # go build + go vet + go test
 ```
 
 Интерфейс: http://localhost:8080/ui/schedules
 
 Установка на сервер без интернета: `make package` → `dist/uni-scheduler.tar.gz` (образы,
-compose, миграции, справочники), инструкция — [deploy/README.md](deploy/README.md).
+compose, база со справочниками), инструкция — [deploy/README.md](deploy/README.md).
 
 ## Документация
 

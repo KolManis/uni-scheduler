@@ -1,3 +1,4 @@
+-- +goose Up
 -- Код (internal/repository/postgres/input_repo.go, ref_write_repo.go) уже читает и пишет
 -- subject_plans.required_building_id и subject_plans.semester_half, но эти колонки
 -- никогда не добавлялись в схему — миграция была пропущена при разработке ветки semester-half.
