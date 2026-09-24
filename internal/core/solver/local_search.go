@@ -74,9 +74,9 @@ const (
 // каждый метод по-своему выбирается из локального оптимума, куда converge не пускает.
 // Пусто или неизвестное значение — iterated local search.
 // run — когда остановиться (по времени или по числу раундов, ADR-0023), rng — случайные
-// ходы с записанным сидом.
+// ходы с записанным сидом, targeted — прицельное разрушение в ILS (ADR-0021).
 func improve(algo ImproveAlgorithm, assignments []domain.Assignment, input domain.InputData,
-	run *runBudget, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
+	run *runBudget, rng *rand.Rand, unavail teacherUnavailable, targeted bool) []domain.Assignment {
 	switch algo {
 	case ImproveSimulatedAnnealing:
 		return simulatedAnnealing(assignments, input, run.deadline, rng, unavail)
@@ -87,7 +87,7 @@ func improve(algo ImproveAlgorithm, assignments []domain.Assignment, input domai
 	case ImproveLNS:
 		return largeNeighborhoodSearch(assignments, input, run, rng, unavail)
 	default:
-		return iteratedLocalSearch(assignments, input, run, rng, unavail)
+		return iteratedLocalSearch(assignments, input, run, rng, unavail, targeted)
 	}
 }
 
@@ -322,7 +322,7 @@ func (e *evaluator) restore(snap []move) {
 // сходимость, и принимаем результат, если он не хуже лучшего. Равные принимаются, чтобы
 // поиск мог двигаться по «плато» одинаковых score. Сила толчка растёт с застоем.
 func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData, run *runBudget,
-	rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
+	rng *rand.Rand, unavail teacherUnavailable, targeted bool) []domain.Assignment {
 	e := newEvaluator(assignments, input, unavail)
 	best := e.snapshot()
 	bestScore := e.score()
@@ -334,7 +334,7 @@ func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData
 		// снять её пары вместе со связанными потоками и расставить заново. Случайными
 		// ходами такой день почти не убирается (нужно сдвинуть сразу несколько групп).
 		recreated := true
-		if g, ok := groupWithSingleDay(e, rng); ok && rng.Intn(4) == 0 {
+		if g, ok := groupWithSingleDay(e, rng); targeted && ok && rng.Intn(4) == 0 {
 			recreated = ruinAndRecreate(e, rng, g)
 		} else {
 			kicks := 2 + rng.Intn(3) + stagnant/8

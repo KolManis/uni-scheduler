@@ -46,6 +46,9 @@ type Options struct {
 	// а не работает до конца Budget (ADR-0023). Вместе с Seed и ImproveSeed из Run
 	// прошлого запуска даёт то же расписание.
 	Rounds int
+	// NoTargetedRuin — ILS без прицельного разрушения, только случайные толчки. Нужен для
+	// экспериментов (сравнение с прицельным разрушением, ADR-0021), в работе не используется.
+	NoTargetedRuin bool
 	// Starts — сколько запусков с разными зёрнами сделать параллельно и взять лучший;
 	// 0 и 1 — один запуск.
 	Starts int
@@ -87,7 +90,7 @@ func solveOnce(input domain.InputData, opt Options) (*domain.Schedule, error) {
 	// 3. Сходимость: простые перестановки, пока расписание улучшается.
 	pairs = converge(pairs, input, run.innerDeadline(), unavail)
 	// 4. Улучшение выбранным методом — выход из локального оптимума.
-	pairs = improve(opt.Improve, pairs, input, run, rng, unavail)
+	pairs = improve(opt.Improve, pairs, input, run, rng, unavail, !opt.NoTargetedRuin)
 	// 5. Улучшение могло освободить место — последняя попытка поставить оставшиеся пары.
 	pairs = insertUnplaced(pairs, input, unavail)
 

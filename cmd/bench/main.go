@@ -31,6 +31,8 @@ func main() {
 		methods = flag.String("methods", "hillclimb,sa,tabu,ga,lns", "методы через запятую")
 		builds  = flag.String("construct", "teacher", "алгоритмы построения через запятую: teacher, dsatur")
 		snaps   = flag.String("snapshots", "", "каталог JSON-снимков справочников вместо БД (например, data/snapshots)")
+		starts  = flag.Int("starts", 1, "параллельных запусков в одном прогоне, берётся лучший")
+		noRuin  = flag.Bool("no-targeted", false, "ILS без прицельного разрушения (для сравнения, ADR-0021)")
 	)
 	flag.Parse()
 
@@ -46,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("construct,method,run,score,gaps_even,gaps_odd,long_gaps,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds")
+	fmt.Println("construct,method,run,score,gaps_even,gaps_odd,long_gaps,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds,rounds")
 	for _, b := range strings.Split(*builds, ",") {
 		construct, ok := solver.ParseConstruction(strings.TrimSpace(b))
 		if !ok {
@@ -58,18 +60,19 @@ func main() {
 			scores := make([]int, 0, *runs)
 			for run := 1; run <= *runs; run++ {
 				start := time.Now()
-				sched, err := solver.Solve(*data, solver.Options{Construction: construct, Improve: algo, Budget: *budget})
+				sched, err := solver.Solve(*data, solver.Options{Construction: construct, Improve: algo, Budget: *budget,
+					Starts: *starts, NoTargetedRuin: *noRuin})
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "%s/%s прогон %d: %v\n", construct, algo, run, err)
 					continue
 				}
 				q := solver.CalculateQuality(sched.Assignments)
 				unplaced := len(solver.ComputeUnplaced(sched.Assignments, *data))
-				fmt.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f\n", construct, algo, run, sched.Score,
+				fmt.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f,%d\n", construct, algo, run, sched.Score,
 					q.Even.GroupGaps, q.Odd.GroupGaps, q.Even.GroupLongGaps+q.Odd.GroupLongGaps, q.Even.SingleClassDays, q.Odd.SingleClassDays,
 					q.Even.SaturdayPairs+q.Odd.SaturdayPairs,
 					max(q.Even.MaxGroupPairsPerDay, q.Odd.MaxGroupPairsPerDay),
-					unplaced, time.Since(start).Seconds())
+					unplaced, time.Since(start).Seconds(), sched.Run.Rounds)
 				scores = append(scores, sched.Score)
 			}
 			if len(scores) > 0 {

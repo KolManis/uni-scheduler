@@ -117,3 +117,29 @@ func TestEvaluator_NeverAddsLongGap(t *testing.T) {
 		t.Fatal("окно в одну пару допустимо")
 	}
 }
+
+// BenchmarkMoveIncremental и BenchmarkMoveFull — стоимость оценки одного хода на реальных
+// данных: инкрементальная оценка (evaluator) против полного пересчёта критерия (гл. 4).
+func BenchmarkMoveIncremental(b *testing.B) {
+	input := loadSnapshotInput(b)
+	sched, _ := Solve(input, Options{Budget: time.Millisecond})
+	e := newEvaluator(sched.Assignments, input, buildTeacherUnavailable(input))
+	rng := newRNG(1)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if undo, ok := randomMove(e, rng); ok {
+			_ = e.score()
+			e.apply(undo)
+		}
+	}
+}
+
+func BenchmarkMoveFull(b *testing.B) {
+	input := loadSnapshotInput(b)
+	sched, _ := Solve(input, Options{Budget: time.Millisecond})
+	pairs := sched.Assignments
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = calculateFitness(pairs, input)
+	}
+}

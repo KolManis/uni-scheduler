@@ -26,7 +26,7 @@ func TestImprove_ImprovesGapSchedule(t *testing.T) {
 	}
 
 	before := calculateFitness(assignments, domain.InputData{})
-	result := improve(ImproveHillClimb, converge(assignments, domain.InputData{}, time.Now().Add(time.Minute), nil), domain.InputData{}, &runBudget{deadline: time.Now().Add(time.Minute)}, newRNG(1), nil)
+	result := improve(ImproveHillClimb, converge(assignments, domain.InputData{}, time.Now().Add(time.Minute), nil), domain.InputData{}, &runBudget{deadline: time.Now().Add(time.Minute)}, newRNG(1), nil, true)
 	after := calculateFitness(result, domain.InputData{})
 
 	if after > before {
@@ -68,7 +68,7 @@ func TestImprove_NeverWorseThanPlainConverge(t *testing.T) {
 	input := domain.InputData{}
 
 	convergedOnly := converge(assignments, input, time.Now().Add(5*time.Second), nil)
-	full := improve(ImproveHillClimb, convergedOnly, input, &runBudget{deadline: time.Now().Add(time.Minute)}, newRNG(1), nil)
+	full := improve(ImproveHillClimb, convergedOnly, input, &runBudget{deadline: time.Now().Add(time.Minute)}, newRNG(1), nil, true)
 
 	convergedScore := calculateFitness(convergedOnly, input)
 	fullScore := calculateFitness(full, input)
