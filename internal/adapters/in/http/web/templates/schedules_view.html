@@ -103,6 +103,18 @@
       </td>
     </tr>
     {{end}}
+    {{range .External}}
+    <tr class="external-pair">
+      <td>{{$pairNum}}</td>
+      <td>Другой факультет{{if .Note}}: {{.Note}}{{end}}</td>
+      <td></td>
+      <td>{{teacherName $teachers .TeacherID}}</td>
+      <td></td>
+      <td></td>
+      <td>{{.Parity}}</td>
+      <td class="muted">не двигается</td>
+    </tr>
+    {{end}}
     {{end}}
   </tbody>
 </table>

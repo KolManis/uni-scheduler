@@ -24,8 +24,15 @@ type assignmentView struct {
 }
 
 type pairGroup struct {
-	PairNum int
-	Items   []assignmentView
+	PairNum  int
+	Items    []assignmentView
+	External []externalView // пары преподавателей на других факультетах в этом слоте
+}
+
+// externalView — пара преподавателя на другом факультете: только для сведения, не двигается.
+type externalView struct {
+	TeacherID string
+	domain.ExternalPair
 }
 
 type dayGroup struct {
@@ -170,14 +177,41 @@ type assignmentFormData struct {
 	Error        string
 }
 
-func buildDayGroups(sched *domain.Schedule) []dayGroup {
-	byDay := map[domain.Day]map[int][]assignmentView{}
-	for idx, a := range sched.Assignments {
-		if byDay[a.TimeSlot.Day()] == nil {
-			byDay[a.TimeSlot.Day()] = map[int][]assignmentView{}
-		}
-		byDay[a.TimeSlot.Day()][a.TimeSlot.PairNum()] = append(byDay[a.TimeSlot.Day()][a.TimeSlot.PairNum()], assignmentView{Idx: idx, Assignment: a})
+// buildDayGroups — пары расписания по дням и номерам пар. Пары на других факультетах
+// показываются у преподавателей, которые ведут занятия в этом расписании.
+func buildDayGroups(sched *domain.Schedule, teachers []domain.Teacher) []dayGroup {
+	type cell struct {
+		items    []assignmentView
+		external []externalView
 	}
+	byDay := map[domain.Day]map[int]*cell{}
+	at := func(slot domain.TimeSlot) *cell {
+		if byDay[slot.Day()] == nil {
+			byDay[slot.Day()] = map[int]*cell{}
+		}
+		c := byDay[slot.Day()][slot.PairNum()]
+		if c == nil {
+			c = &cell{}
+			byDay[slot.Day()][slot.PairNum()] = c
+		}
+		return c
+	}
+	inSchedule := map[string]bool{}
+	for idx, a := range sched.Assignments {
+		c := at(a.TimeSlot)
+		c.items = append(c.items, assignmentView{Idx: idx, Assignment: a})
+		inSchedule[a.TeacherID] = true
+	}
+	for _, t := range teachers {
+		if !inSchedule[t.ID] {
+			continue
+		}
+		for _, ep := range t.ExternalPairs {
+			c := at(ep.TimeSlot)
+			c.external = append(c.external, externalView{TeacherID: t.ID, ExternalPair: ep})
+		}
+	}
+
 	var groups []dayGroup
 	for _, day := range domain.AllDays {
 		pairsMap := byDay[day]
@@ -191,9 +225,9 @@ func buildDayGroups(sched *domain.Schedule) []dayGroup {
 		sort.Ints(pairNums)
 		var pairs []pairGroup
 		for _, p := range pairNums {
-			items := pairsMap[p]
-			sort.Slice(items, func(i, j int) bool { return items[i].Idx < items[j].Idx })
-			pairs = append(pairs, pairGroup{PairNum: p, Items: items})
+			c := pairsMap[p]
+			sort.Slice(c.items, func(i, j int) bool { return c.items[i].Idx < c.items[j].Idx })
+			pairs = append(pairs, pairGroup{PairNum: p, Items: c.items, External: c.external})
 		}
 		groups = append(groups, dayGroup{Day: day, Pairs: pairs})
 	}
@@ -295,7 +329,7 @@ func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id in
 		return
 	}
 	renderStatus(w, r, status, h.pages["schedules_view.html"], scheduleViewData{
-		Schedule: sched, DayGroups: buildDayGroups(sched),
+		Schedule: sched, DayGroups: buildDayGroups(sched, data.Teachers),
 		Breakdown: h.svc.Breakdown(sched, *data),
 		Quality:   h.svc.Quality(sched),
 		Teachers:  data.Teachers, Rooms: data.Rooms, Buildings: data.Buildings, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
@@ -364,6 +398,13 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 func conflictMessage(c *app.ConflictError) string {
 	if c.Type == app.ConflictTeacherUnavailable {
 		return "Конфликт: преподаватель отметил это время как недоступное"
+	}
+	if c.Type == app.ConflictTeacherExternalPair {
+		msg := "Конфликт: у преподавателя в это время пара на другом факультете"
+		if c.Detail != "" {
+			msg += ": " + c.Detail
+		}
+		return msg + " (" + parityLabel(c.Parity) + ")"
 	}
 	var what string
 	switch c.Type {
@@ -444,4 +485,15 @@ func (h *Handler) schedulesPatchAssignment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.loadScheduleView(w, r, id, http.StatusOK, "", "Занятие перенесено")
+}
+
+// parityLabel — неделя по-русски: «каждая неделя», «чётная неделя», «нечётная неделя».
+func parityLabel(p domain.Parity) string {
+	switch p {
+	case domain.Even:
+		return "чётная неделя"
+	case domain.Odd:
+		return "нечётная неделя"
+	}
+	return "каждая неделя"
 }

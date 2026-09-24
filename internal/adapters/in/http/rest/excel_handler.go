@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/xuri/excelize/v2"
@@ -121,7 +122,10 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		}
 		teacherGrid := make(map[string]map[domain.Day]map[int]*slotInfo)
 
-		for _, a := range sched.Assignments {
+		// Пары на других факультетах — в сетку как занятия особого вида: у преподавателя
+		// в выгрузке видно всё его время, а не «дыра» там, где он занят вне кафедры.
+		cells := withExternalPairs(sched.Assignments, input.Teachers)
+		for _, a := range cells {
 			if !matchesWeek(a) {
 				continue
 			}
@@ -176,6 +180,12 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 			Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
 			Border:    borderStyle,
 			Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"E2EFDA"}},
+		})
+		styleExternal, _ := f.NewStyle(&excelize.Style{
+			Alignment: &excelize.Alignment{WrapText: true, Vertical: "top", Horizontal: "center"},
+			Border:    borderStyle,
+			Font:      &excelize.Font{Italic: true, Color: "595959"},
+			Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"EDEDED"}},
 		})
 		dayStyle := func(dayIdx int) int {
 			if dayIdx%2 == 0 {
@@ -267,6 +277,22 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 							}
 						}
 
+						if a != nil && a.Type == externalPairType {
+							value := "Другой факультет"
+							if a.SubjectID != "" {
+								value += "\n" + a.SubjectID
+							}
+							if rowsNeeded == 2 {
+								if parityFilter == domain.Even {
+									value += "\n(чётная неделя)"
+								} else {
+									value += "\n(нечётная неделя)"
+								}
+							}
+							f.SetCellValue(sheet, cellRef, value)
+							f.SetCellStyle(sheet, cellRef, cellRef, styleExternal)
+							continue
+						}
 						if a != nil {
 							subject := subjectMap[a.SubjectID]
 							if subject == "" {
@@ -778,7 +804,11 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 	}
 	grid := make(map[domain.Day]map[int]*slotInfo)
 
-	for _, a := range sched.Assignments {
+	cells := sched.Assignments
+	if viewType != "group" {
+		cells = withExternalPairs(sched.Assignments, input.Teachers)
+	}
+	for _, a := range cells {
 		if !matchesWeek(a) {
 			continue
 		}
@@ -904,7 +934,13 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				if a != nil {
+				if a != nil && a.Type == externalPairType {
+					value := "Другой факультет"
+					if a.SubjectID != "" {
+						value += "\n" + a.SubjectID
+					}
+					f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), strings.TrimSpace(value+" "+weekLabel))
+				} else if a != nil {
 					subject := subjectMap[a.SubjectID]
 					if subject == "" {
 						subject = a.SubjectID
@@ -949,4 +985,26 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_schedule_%d.xlsx", sheetName, scheduleID))
 	w.WriteHeader(http.StatusOK)
 	f.Write(w)
+}
+
+// externalPairType — вид «занятия» для пары преподавателя на другом факультете в выгрузке;
+// в SubjectID такой записи лежит пометка пары.
+const externalPairType domain.ClassType = "external"
+
+// withExternalPairs — пары расписания плюс пары преподавателей на других факультетах
+// в виде записей externalPairType (пометка — в SubjectID).
+func withExternalPairs(assignments []domain.Assignment, teachers []domain.Teacher) []domain.Assignment {
+	cells := append([]domain.Assignment(nil), assignments...)
+	for _, t := range teachers {
+		for _, ep := range t.ExternalPairs {
+			p := ep.Parity
+			if p == "" {
+				p = domain.Always
+			}
+			cells = append(cells, domain.Assignment{
+				TeacherID: t.ID, SubjectID: ep.Note, Type: externalPairType, TimeSlot: ep.TimeSlot, Parity: p,
+			})
+		}
+	}
+	return cells
 }

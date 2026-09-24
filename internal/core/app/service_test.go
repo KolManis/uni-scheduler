@@ -107,3 +107,45 @@ func TestPatchAssignment_TeacherAvailability(t *testing.T) {
 		})
 	}
 }
+
+func TestPatchAssignment_ExternalPair(t *testing.T) {
+	slot := domain.MustNewTimeSlot(domain.Wednesday, 2)
+	tests := []struct {
+		name         string
+		parity       domain.Parity
+		wantConflict string
+	}{
+		{"пара «всегда» на время внешней нечётной — конфликт", domain.Always, ConflictTeacherExternalPair},
+		{"нечётная на время внешней нечётной — конфликт", domain.Odd, ConflictTeacherExternalPair},
+		{"чётная на время внешней нечётной — можно", domain.Even, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := &fakeInputRepo{data: domain.InputData{Teachers: []domain.Teacher{{
+				ID:            "T1",
+				ExternalPairs: []domain.ExternalPair{{TimeSlot: slot, Parity: domain.Odd, Note: "ФИТ, 305"}},
+			}}}}
+			output := &fakeOutputRepo{sched: domain.Schedule{ID: 1, Assignments: []domain.Assignment{{
+				GroupIDs: []string{"G1"}, TeacherID: "T1", RoomID: "R1",
+				TimeSlot: domain.MustNewTimeSlot(domain.Monday, 1), Parity: domain.Always,
+			}}}}
+			svc := NewService(input, output, nil)
+
+			_, err := svc.PatchAssignment(context.Background(), 1, 0, PatchRequest{TimeSlot: slot, Parity: tt.parity})
+
+			var conflict *ConflictError
+			got := ""
+			if errors.As(err, &conflict) {
+				got = conflict.Type
+				if conflict.Detail != "ФИТ, 305" || conflict.Parity != domain.Odd {
+					t.Errorf("в конфликте нет данных внешней пары: %+v", conflict)
+				}
+			} else if err != nil {
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+			if got != tt.wantConflict {
+				t.Errorf("конфликт: получено %q, ожидалось %q", got, tt.wantConflict)
+			}
+		})
+	}
+}
