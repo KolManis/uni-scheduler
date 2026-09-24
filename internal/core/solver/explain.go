@@ -13,12 +13,16 @@ import (
 // правилами (penalties.go), что и оценка, поэтому сумма Penalty равна CalculateFitness.
 // Порядок: сначала дорогие, при равной цене — по правилу, неделе и дню.
 func ExplainScore(assignments []domain.Assignment, input domain.InputData) []domain.Violation {
+	buildingNames := make(map[string]string)
+	for _, b := range input.Buildings {
+		buildingNames[b.ID] = b.Name
+	}
 	var out []domain.Violation
 	for _, weekParity := range []domain.Parity{domain.Even, domain.Odd} {
 		pairs := assignmentsInWeek(assignments, weekParity)
 		groups, teachers := buildWeeks(pairs, input)
 		for id, w := range groups {
-			out = append(out, groupViolations(id, weekParity, w)...)
+			out = append(out, groupViolations(id, weekParity, w, buildingNames)...)
 		}
 		for id, w := range teachers {
 			out = append(out, teacherViolations(id, weekParity, w)...)
@@ -47,7 +51,8 @@ func ExplainScore(assignments []domain.Assignment, input domain.InputData) []dom
 }
 
 // groupViolations — нарушения одной группы за неделю: правила те же, что в groupPenalties.
-func groupViolations(groupID string, weekParity domain.Parity, w *week) []domain.Violation {
+// buildingNames — названия корпусов для подписей переходов («Корпус А → Корпус Б»).
+func groupViolations(groupID string, weekParity domain.Parity, w *week, buildingNames map[string]string) []domain.Violation {
 	out := violationList{base: domain.Violation{GroupIDs: []string{groupID}, Week: weekParity}}
 
 	if w.saturday == 1 {
@@ -80,7 +85,7 @@ func groupViolations(groupID string, weekParity domain.Parity, w *week) []domain
 			}
 			from, to := w.building[d*6+prev], w.building[d*6+next]
 			out.add("BuildingTransitions", "Переход в другой корпус", day,
-				fmt.Sprintf("корпус %s → %s: %d-я → %d-я пара", from, to, prev+1, next+1), transitionPenalty(from, to, next-prev))
+				fmt.Sprintf("%s → %s: %d-я → %d-я пара", buildingLabel(buildingNames, from), buildingLabel(buildingNames, to), prev+1, next+1), transitionPenalty(from, to, next-prev))
 		}
 	}
 	out.add("GroupTooFewDays", "Мало учебных дней", "", fmt.Sprintf("%d пар за %d дн.", total, days), tooFewDaysPenalty(total, days))
@@ -166,6 +171,14 @@ func buildWeeks(pairs []domain.Assignment, input domain.InputData) (groups, teac
 		weekFor(teachers, a.TeacherID).add(slot, "")
 	}
 	return groups, teachers
+}
+
+// buildingLabel — название корпуса, а если его нет в справочнике — «корпус <id>».
+func buildingLabel(names map[string]string, id string) string {
+	if name := names[id]; name != "" {
+		return name
+	}
+	return "корпус " + id
 }
 
 // pairList — «1, 2, 4» (номера с единицы).
