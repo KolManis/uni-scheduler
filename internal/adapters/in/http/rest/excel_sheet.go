@@ -157,8 +157,11 @@ func writeTimetable(f *excelize.File, sheet string, cols []timetableColumn, layo
 // листе (1 или 2): если клетке нужна одна, а слоту две, строки объединяются.
 func writeSlot(f *excelize.File, sheet string, col, row, rows int, p weekPair, dayStyle int, styles excelStyles, names excelNames) {
 	if rows == 1 || p.everyWeek() || (p.even == nil && p.odd == nil) {
-		writeCell(f, sheet, cellName(col, row), p.even, "", dayStyle, styles, names)
+		style := writeCell(f, sheet, cellName(col, row), p.even, "", dayStyle, styles, names)
 		if rows == 2 {
+			// Рамку объединённой клетки Excel рисует по обеим клеткам: без стиля у нижней
+			// пропадают её нижняя и боковые границы.
+			f.SetCellStyle(sheet, cellName(col, row+1), cellName(col, row+1), style)
 			f.MergeCell(sheet, cellName(col, row), cellName(col, row+1))
 		}
 		return
@@ -169,10 +172,15 @@ func writeSlot(f *excelize.File, sheet string, col, row, rows int, p weekPair, d
 
 // writeCell — текст одной клетки: «предмет (вид)», преподаватель, аудитория и, если пара
 // не каждую неделю, пометка недели. Пара на другом факультете — серым.
-func writeCell(f *excelize.File, sheet, cell string, a *domain.Assignment, week string, dayStyle int, styles excelStyles, names excelNames) {
-	f.SetCellStyle(sheet, cell, cell, dayStyle)
+// Возвращает стиль, которым покрашена клетка.
+func writeCell(f *excelize.File, sheet, cell string, a *domain.Assignment, week string, dayStyle int, styles excelStyles, names excelNames) int {
+	style := dayStyle
+	if a != nil && a.Type == externalPairType {
+		style = styles.external
+	}
+	f.SetCellStyle(sheet, cell, cell, style)
 	if a == nil {
-		return
+		return style
 	}
 	var text string
 	if a.Type == externalPairType {
@@ -180,7 +188,6 @@ func writeCell(f *excelize.File, sheet, cell string, a *domain.Assignment, week 
 		if a.SubjectID != "" {
 			text += "\n" + a.SubjectID // пометка пары
 		}
-		f.SetCellStyle(sheet, cell, cell, styles.external)
 	} else {
 		text = fmt.Sprintf("%s (%s)\n%s\nауд.%s",
 			orID(names.subjects, a.SubjectID), orID(classTypeShort, a.Type), names.teachers[a.TeacherID], orID(names.rooms, a.RoomID))
@@ -189,6 +196,7 @@ func writeCell(f *excelize.File, sheet, cell string, a *domain.Assignment, week 
 		text += "\n" + week
 	}
 	f.SetCellValue(sheet, cell, text)
+	return style
 }
 
 // orID — подпись из справочника, а если её нет — сам идентификатор.
