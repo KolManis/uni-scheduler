@@ -135,6 +135,9 @@ func insertWithEjection(e *evaluator, i int) bool {
 func blockersAt(e *evaluator, i, s int) []int {
 	inf := &e.info[i]
 	shares := func(j int) bool {
+		if e.asg[j].Pinned {
+			return false // закреплённую пару не вытесняем
+		}
 		o := &e.info[j]
 		if !(inf.weeks[0] && o.weeks[0]) && !(inf.weeks[1] && o.weeks[1]) {
 			return false

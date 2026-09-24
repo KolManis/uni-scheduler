@@ -26,6 +26,9 @@ type GenerateInput struct {
 	ImproveAlgo    string                   // "hillclimb" (default) | "sa" | "tabu" | "ga" | "lns"
 	ParallelStarts int                      // 0/1 — один запуск (по умолчанию), N>1 — многостартовый параллельный поиск
 	Preferences    domain.SolverPreferences // необязательные правила, по умолчанию выключены
+	// BaseScheduleID — перегенерация: закреплённые пары этого расписания остаются на
+	// местах, остальное строится заново вокруг них. 0 — обычная генерация с нуля.
+	BaseScheduleID int64
 }
 
 // PatchRequest — запрос на изменение одного назначения.
@@ -91,6 +94,10 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 	if err != nil {
 		return nil, fmt.Errorf("load input: %w", err)
 	}
+	fixed, err := s.pinnedOf(ctx, in.BaseScheduleID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Фильтрация планов по половине семестра
 	if in.SemesterHalf == domain.HalfSecond {
@@ -132,7 +139,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		var solveErr error
 
 		improve := solver.ImproveAlgorithm(in.ImproveAlgo)
-		result, solveErr = solver.SolveMultiStart(dataForSolver, construct, in.MaxIterations, improve, in.ParallelStarts, solverBudget)
+		result, solveErr = solver.SolveMultiStartFixed(dataForSolver, construct, in.MaxIterations, improve, in.ParallelStarts, solverBudget, fixed)
 		if solveErr != nil {
 			ch <- solveResult{err: solveErr}
 			return
@@ -190,6 +197,10 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	if err != nil {
 		return nil, fmt.Errorf("load input: %w", err)
 	}
+	fixed, err := s.pinnedOf(ctx, in.BaseScheduleID)
+	if err != nil {
+		return nil, err
+	}
 	if in.SemesterHalf == domain.HalfSecond {
 		filtered := data.SubjectPlans[:0]
 		for _, sp := range data.SubjectPlans {
@@ -246,7 +257,7 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	}
 	for i, m := range methods {
 		go func(idx int, algo solver.ImproveAlgorithm, suffix string) {
-			sched, solveErr := solver.SolveWithBudget(dataForSolver, construct, in.MaxIterations, algo, 0, solverBudget)
+			sched, solveErr := solver.SolveWithFixed(dataForSolver, construct, in.MaxIterations, algo, 0, solverBudget, fixed)
 			if solveErr != nil {
 				results[idx] = genResult{err: solveErr}
 				done <- idx
@@ -367,27 +378,18 @@ func (s *Service) PatchAssignment(ctx context.Context, schedID int64, idx int, r
 		return nil, fmt.Errorf("load input: %w", err)
 	}
 
-	// HC7: преподаватель доступен в новом слоте. Перенос меняет именно время,
-	// поэтому занятие может попасть в слот, отмеченный преподавателем как недоступный.
+	// HC1–HC3, HC7: преподаватель, группы и аудитория свободны, преподаватель доступен.
 	modified := sched.Assignments[idx]
-	if isTeacherUnavailable(data.Teachers, modified.TeacherID, modified.TimeSlot) {
-		return nil, &ConflictError{Type: ConflictTeacherUnavailable, ResourceID: modified.TeacherID, ConflictWith: -1}
-	}
-	if ep := externalPairAt(data.Teachers, modified.TeacherID, modified.TimeSlot, modified.Parity); ep != nil {
-		return nil, &ConflictError{Type: ConflictTeacherExternalPair, ResourceID: modified.TeacherID,
-			ConflictWith: -1, Detail: ep.Note, Parity: ep.Parity}
-	}
-
-	// HC1–HC3: преподаватель, группа и аудитория не заняты другим занятием
-	for j, a := range sched.Assignments {
-		if j == idx {
-			continue
+	for _, r := range data.Rooms {
+		if r.ID == modified.RoomID {
+			// Корпус пары — корпус её аудитории: от него зависят переходы между корпусами.
+			modified.BuildingID = r.BuildingID
+			sched.Assignments[idx].BuildingID = r.BuildingID
 		}
-		if conflict := checkConflict(modified, a, j); conflict != nil {
-			// откат
-			sched.Assignments[idx] = original
-			return nil, conflict
-		}
+	}
+	if conflict := moveConflict(sched.Assignments, idx, modified, data.Teachers, false); conflict != nil {
+		sched.Assignments[idx] = original
+		return nil, conflict
 	}
 
 	// Пересчитываем score

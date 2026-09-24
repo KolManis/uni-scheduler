@@ -51,6 +51,8 @@ type scheduleService interface {
 	Quality(sched *domain.Schedule) domain.WeekQuality
 	Delete(ctx context.Context, id int64) error
 	PatchAssignment(ctx context.Context, schedID int64, idx int, req app.PatchRequest) (*domain.Schedule, error)
+	SetPinned(ctx context.Context, schedID int64, idx int, pinned bool) (*domain.Schedule, error)
+	MoveOptions(ctx context.Context, schedID int64, idx int) ([]app.MoveOption, error)
 }
 
 // Handler отдаёт серверно-рендеренный UI (Go html/template + лёгкий AJAX-хелпер вместо htmx)
@@ -74,7 +76,7 @@ func NewHandler(input inputLoader, ref refWriter, svc scheduleService) *Handler 
 			"groups_list.html", "groups_form.html",
 			"teachers_list.html", "teachers_form.html",
 			"subject_plans_list.html", "subject_plans_form.html",
-			"schedules_list.html", "schedules_view.html", "schedules_assignment_form.html", "schedules_groups_view.html",
+			"schedules_list.html", "schedules_view.html", "schedules_assignment_form.html", "schedules_groups_view.html", "schedules_teachers_view.html",
 			"help.html",
 		),
 	}
@@ -135,6 +137,9 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	ui.HandleFunc("/schedules/generate", h.schedulesGenerate).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}", h.schedulesView).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/groups", h.schedulesGroupsView).Methods(http.MethodGet)
+	ui.HandleFunc("/schedules/{id:[0-9]+}/teachers", h.schedulesTeachersView).Methods(http.MethodGet)
+	ui.HandleFunc("/schedules/{id:[0-9]+}/regenerate", h.schedulesRegenerate).Methods(http.MethodPost)
+	ui.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}/pin", h.schedulesPin).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}", h.schedulesDelete).Methods(http.MethodDelete)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}/edit", h.schedulesAssignmentForm).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}", h.schedulesPatchAssignment).Methods(http.MethodPatch)

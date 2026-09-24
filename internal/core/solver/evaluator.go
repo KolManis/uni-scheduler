@@ -345,6 +345,12 @@ type move struct {
 // либо ни одного. Возвращает обратный набор (для отката) и признак успеха.
 // Одна пара не должна встречаться в наборе дважды.
 func (e *evaluator) apply(moves []move) ([]move, bool) {
+	// Закреплённые пары не двигаются ни одним ходом; «ход на то же место» (снимок) допустим.
+	for _, m := range moves {
+		if e.asg[m.i].Pinned && (m.slot != e.slot[m.i] || m.room != e.info[m.i].room) {
+			return nil, false
+		}
+	}
 	for _, m := range moves {
 		e.occupy(m.i, e.slot[m.i], e.info[m.i].room, -1)
 	}

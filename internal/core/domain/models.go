@@ -72,6 +72,9 @@ type Assignment struct {
 	TimeSlot   TimeSlot  `json:"time_slot"`
 	Parity     Parity    `json:"parity"`
 	BuildingID string    `json:"building_id"`
+	// Pinned — пара закреплена человеком: при перегенерации расписания она остаётся
+	// на своём месте и в своей аудитории, остальное строится вокруг неё.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 // UnplacedItem описывает часть учебного плана, которую солвер не смог поставить в расписание

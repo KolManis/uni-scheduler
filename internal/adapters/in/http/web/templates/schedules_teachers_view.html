@@ -1,0 +1,64 @@
+{{define "title"}}Расписание по преподавателям{{end}}
+{{define "content"}}
+{{$id := .Schedule.ID}}
+{{$rooms := .Rooms}}
+{{$buildings := .Buildings}}
+{{$groups := .Groups}}
+{{$subjectPlans := .SubjectPlans}}
+<div class="toolbar">
+  <h1>{{.Schedule.Name}} <span class="muted">— по преподавателям</span></h1>
+  <div class="actions">
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}" hx-target="#main" href="/ui/schedules/{{$id}}">← по дням</a>
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/groups" hx-target="#main" href="/ui/schedules/{{$id}}/groups">По группам</a>
+    <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_teachers" target="_blank">Excel: все преподаватели</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <div class="hint">Красным — окна преподавателя (пустая пара между занятиями в один день). Серым — пары на других факультетах, они не двигаются.</div>
+  <div style="margin-top:8px;">
+    {{range .Blocks}}<a class="btn small secondary" href="#t-{{.TeacherID}}" style="margin:2px;">{{.Name}}</a>{{end}}
+  </div>
+</div>
+
+{{range .Blocks}}
+{{$tid := .TeacherID}}
+<h2 id="t-{{.TeacherID}}">{{.Name}} <span class="muted">— пар: {{.Pairs}}</span>
+  <a class="btn small secondary" href="/api/v1/schedules/{{$id}}/excel?type=teacher&id={{.TeacherID}}" target="_blank">Excel</a></h2>
+<table class="group-grid" style="margin-bottom:24px;">
+  <thead>
+    <tr><th>Пара</th>{{range $.Days}}<th>{{dayLabel .}}</th>{{end}}</tr>
+  </thead>
+  <tbody>
+    {{range .Rows}}
+    <tr>
+      <td>{{.PairNum}}</td>
+      {{range .Cells}}
+      {{if .IsGap}}
+      <td class="gap-cell">окно</td>
+      {{else if or .Items .External}}
+      <td>
+        {{range .Items}}
+        <div style="margin-bottom:4px;">
+          <b>{{subjectName $subjectPlans .SubjectID}}</b> ({{.Type}}){{if .Pinned}} <span title="закреплена">📌</span>{{end}}<br>
+          {{joinNames $groups .GroupIDs}}<br>
+          ауд. {{roomLabel $rooms $buildings .RoomID}}
+          {{if ne .Parity "always"}}<br><span class="muted">{{.Parity}}</span>{{end}}
+        </div>
+        {{end}}
+        {{range .External}}
+        <div class="external-pair-cell">Другой факультет{{if .Note}}: {{.Note}}{{end}}{{if ne .Parity "always"}}<br>{{.Parity}}{{end}}</div>
+        {{end}}
+      </td>
+      {{else}}
+      <td></td>
+      {{end}}
+      {{end}}
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted">В этом расписании нет занятий.</p>
+{{end}}
+{{end}}

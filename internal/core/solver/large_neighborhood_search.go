@@ -45,6 +45,9 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 	noImprove := 0
 	for noImprove < lnsMaxNoImprove && !time.Now().After(deadline) {
 		ruined := chooseRuin(e, rng)
+		if len(ruined) == 0 {
+			break
+		}
 		unplace := make([]move, len(ruined))
 		for k, i := range ruined {
 			unplace[k] = move{i, unplacedSlot, e.info[i].room}
@@ -76,13 +79,22 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 // chooseRuin — какие пары снять на этой итерации.
 func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 	n := len(e.asg)
+	movable := 0
+	for i := range e.asg {
+		if !e.asg[i].Pinned {
+			movable++
+		}
+	}
+	if movable == 0 {
+		return nil
+	}
 	frac := lnsDestroyMin + rng.Float64()*(lnsDestroyMax-lnsDestroyMin)
-	k := max(1, int(float64(n)*frac))
+	k := min(movable, max(1, int(float64(n)*frac)))
 
 	picked := make(map[int]bool, k)
 	var out []int
 	add := func(i int) {
-		if !picked[i] && len(out) < k {
+		if !picked[i] && !e.asg[i].Pinned && len(out) < k {
 			picked[i] = true
 			out = append(out, i)
 		}

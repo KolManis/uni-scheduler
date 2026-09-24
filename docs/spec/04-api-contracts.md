@@ -54,6 +54,30 @@
 | 409 | конфликт: `{"type": "teacher_busy \| group_busy \| room_busy \| teacher_unavailable \| teacher_external_pair", "resource_id": "…", "conflict_with": N}`; у `teacher_unavailable` и `teacher_external_pair` `conflict_with` = −1; у `teacher_external_pair` ещё `detail` (пометка пары на другом факультете) и `parity` (её неделя) |
 | 404 | нет расписания |
 
+При переносе в другую аудиторию корпус пары (`building_id`) берётся из аудитории.
+
+`GET /schedules/{id}/assignments/{idx}/options` — куда можно перенести пару с её чётностью:
+36 записей, по одной на слот сетки.
+
+```json
+{ "time_slot": {"day": "monday", "pair_num": 3}, "room_id": "R102", "current": false,
+  "conflict": null, "score_delta": -4000, "gaps_delta": 0, "long_gaps_delta": 0,
+  "single_days_delta": -1, "saturday_delta": 0 }
+```
+
+`conflict` — как в ответе 409; `null` — перенос возможен в аудиторию `room_id` (своя, если свободна,
+иначе другая подходящая по типу, вместимости и корпусам). Изменения — сумма по чётной и нечётной
+неделе, отрицательные — лучше.
+
+## Закрепление и перегенерация
+
+`PUT /schedules/{id}/assignments/{idx}/pinned` — `{"pinned": true}` закрепляет пару, `false` снимает
+закрепление; 200 — расписание целиком.
+
+`POST /schedules/generate` с `"base_schedule_id": N` — перегенерация: закреплённые пары расписания N
+остаются на местах и в своих аудиториях, остальные пары строятся заново вокруг них. Результат —
+новое расписание, исходное не меняется.
+
 ## Справочники
 `GET`, `POST`, `PUT /{id}`, `DELETE /{id}` для `/buildings`, `/departments`, `/rooms`, `/groups`,
 `/teachers`, `/subject-plans`. `POST /import/excel` — импорт справочников из xlsx.

@@ -207,3 +207,16 @@ select {
 
 /* Пара преподавателя на другом факультете: для сведения, не редактируется. */
 tr.external-pair td { color: var(--muted); font-style: italic; background: rgba(128, 128, 128, 0.08); }
+.external-pair-cell { color: var(--muted); font-style: italic; margin-bottom: 4px; }
+
+/* Сетка «куда перенести» в форме переноса пары. */
+.move-grid td { text-align: center; font-size: 12px; padding: 4px; }
+.move-grid .move-current { background: rgba(59, 130, 246, 0.15); font-weight: 600; }
+.move-grid .move-no { color: var(--muted); background: rgba(128, 128, 128, 0.08); }
+.move-grid .move-ok { background: rgba(34, 197, 94, 0.12); }
+.move-grid .move-better { background: rgba(34, 197, 94, 0.3); }
+.move-grid .move-warn { background: rgba(234, 179, 8, 0.25); }
+.move-grid form { margin: 0; }
+.move-btn { width: 100%; border: none; background: transparent; cursor: pointer; font: inherit; padding: 2px; }
+.move-btn:hover { text-decoration: underline; }
+.move-effects { color: var(--muted); }

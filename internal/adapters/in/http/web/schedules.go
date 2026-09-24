@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/KolManis/uni-scheduler/internal/core/app"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
@@ -50,6 +51,7 @@ type scheduleViewData struct {
 	Buildings    []domain.Building
 	Groups       []domain.Group
 	SubjectPlans []domain.SubjectPlan
+	PinnedCount  int // закреплённых пар — есть ли что сохранить при перегенерации
 	Error        string
 	Success      string
 }
@@ -174,7 +176,90 @@ type assignmentFormData struct {
 	SubjectPlans []domain.SubjectPlan
 	Days         []domain.Day
 	Pairs        []int
+	Moves        []moveRow // куда можно перенести пару: строки — номера пар, колонки — дни
 	Error        string
+}
+
+// moveCell — одна клетка сетки «куда перенести»: можно ли, в какую аудиторию и что изменится.
+type moveCell struct {
+	Day     domain.Day
+	Pair    int
+	Current bool
+	OK      bool
+	RoomID  string
+	Reason  string // почему нельзя (кратко)
+	Effects string // что изменится: окна, дни с одной парой, суббота
+	Delta   int    // изменение score
+	Warn    bool   // перенос откроет окно в 2+ пары: разрешён, но нарушает HC8
+}
+
+type moveRow struct {
+	Pair  int
+	Cells []moveCell
+}
+
+// buildMoveGrid раскладывает варианты переноса в сетку «пара × день».
+func buildMoveGrid(opts []app.MoveOption, currentRoom string) []moveRow {
+	bySlot := make(map[domain.TimeSlot]app.MoveOption, len(opts))
+	for _, o := range opts {
+		bySlot[o.Slot] = o
+	}
+	rows := make([]moveRow, 0, len(allPairs))
+	for _, pair := range allPairs {
+		row := moveRow{Pair: pair}
+		for _, day := range allDays {
+			o := bySlot[domain.MustNewTimeSlot(day, pair)]
+			c := moveCell{Day: day, Pair: pair, Current: o.Current, RoomID: o.RoomID}
+			switch {
+			case o.Current:
+			case o.Conflict != nil:
+				c.Reason = shortConflict(o.Conflict)
+			default:
+				c.OK = true
+				c.Delta = o.ScoreDelta
+				c.Effects = moveEffects(o, currentRoom)
+				c.Warn = o.LongGapsDelta > 0
+			}
+			row.Cells = append(row.Cells, c)
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// shortConflict — причина, по которой в слот нельзя, в два-три слова для клетки сетки.
+func shortConflict(c *app.ConflictError) string {
+	switch c.Type {
+	case app.ConflictTeacherUnavailable:
+		return "преподаватель недоступен"
+	case app.ConflictTeacherExternalPair:
+		return "другой факультет"
+	case "teacher_busy":
+		return "преподаватель занят"
+	case "group_busy":
+		return "группа занята"
+	case "room_busy":
+		return "нет свободной аудитории"
+	}
+	return c.Type
+}
+
+// moveEffects — что изменит перенос, человеческими словами: «−1 окно, +1 день с одной парой».
+func moveEffects(o app.MoveOption, currentRoom string) string {
+	var parts []string
+	add := func(n int, what string) {
+		if n != 0 {
+			parts = append(parts, fmt.Sprintf("%+d %s", n, what))
+		}
+	}
+	add(o.LongGapsDelta, "окно 2+")
+	add(o.GapsDelta, "окна")
+	add(o.SingleDaysDelta, "дн. с 1 парой")
+	add(o.SaturdayDelta, "суббота")
+	if o.RoomID != currentRoom {
+		parts = append(parts, "другая ауд.")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // buildDayGroups — пары расписания по дням и номерам пар. Пары на других факультетах
@@ -329,7 +414,7 @@ func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id in
 		return
 	}
 	renderStatus(w, r, status, h.pages["schedules_view.html"], scheduleViewData{
-		Schedule: sched, DayGroups: buildDayGroups(sched, data.Teachers),
+		Schedule: sched, DayGroups: buildDayGroups(sched, data.Teachers), PinnedCount: pinnedCount(sched),
 		Breakdown: h.svc.Breakdown(sched, *data),
 		Quality:   h.svc.Quality(sched),
 		Teachers:  data.Teachers, Rooms: data.Rooms, Buildings: data.Buildings, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
@@ -391,7 +476,7 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 	render(w, r, h.pages["schedules_assignment_form.html"], assignmentFormData{
 		ScheduleID: id, Idx: idx, Assignment: sched.Assignments[idx],
 		Rooms: data.Rooms, Teachers: data.Teachers, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
-		Days: allDays, Pairs: allPairs,
+		Days: allDays, Pairs: allPairs, Moves: h.moveGrid(r, id, idx, sched.Assignments[idx].RoomID),
 	})
 }
 
@@ -442,7 +527,7 @@ func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id in
 	renderStatus(w, r, status, h.pages["schedules_assignment_form.html"], assignmentFormData{
 		ScheduleID: id, Idx: idx, Assignment: a,
 		Rooms: data.Rooms, Teachers: data.Teachers, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
-		Days: allDays, Pairs: allPairs, Error: errMsg,
+		Days: allDays, Pairs: allPairs, Moves: h.moveGrid(r, id, idx, sched.Assignments[idx].RoomID), Error: errMsg,
 	})
 }
 
@@ -496,4 +581,85 @@ func parityLabel(p domain.Parity) string {
 		return "нечётная неделя"
 	}
 	return "каждая неделя"
+}
+
+// moveGrid — сетка вариантов переноса; при ошибке пустая (форма работает и без неё).
+func (h *Handler) moveGrid(r *http.Request, id int64, idx int, room string) []moveRow {
+	opts, err := h.svc.MoveOptions(r.Context(), id, idx)
+	if err != nil {
+		return nil
+	}
+	return buildMoveGrid(opts, room)
+}
+
+// schedulesPin закрепляет пару или снимает закрепление (pinned=true|false).
+func (h *Handler) schedulesPin(w http.ResponseWriter, r *http.Request) {
+	id, err := int64FromPath(r, "id")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	idx, err := intFromPath(r, "idx")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !parseForm(w, r) {
+		return
+	}
+	pinned := r.FormValue("pinned") == "true"
+	if _, err := h.svc.SetPinned(r.Context(), id, idx, pinned); err != nil {
+		h.loadScheduleView(w, r, id, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	msg := "Закрепление снято"
+	if pinned {
+		msg = "Пара закреплена: при перегенерации она останется на месте"
+	}
+	h.loadScheduleView(w, r, id, http.StatusOK, "", msg)
+}
+
+// schedulesRegenerate строит новое расписание вокруг закреплённых пар этого.
+// Построение и правила берутся из исходного расписания.
+func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
+	id, err := int64FromPath(r, "id")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !parseForm(w, r) {
+		return
+	}
+	base, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	prefs := base.Options
+	construction := prefs.Construction
+	prefs.Construction = ""
+	sched, err := h.svc.Generate(r.Context(), app.GenerateInput{
+		Name:           base.Name + " — перегенерация",
+		SolverType:     construction,
+		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 120),
+		ImproveAlgo:    r.FormValue("improve_algo"),
+		Preferences:    prefs,
+		BaseScheduleID: id,
+	})
+	if err != nil {
+		h.loadScheduleView(w, r, id, http.StatusUnprocessableEntity, "Не удалось перегенерировать: "+err.Error(), "")
+		return
+	}
+	h.loadScheduleView(w, r, sched.ID, http.StatusOK, "",
+		fmt.Sprintf("Новое расписание построено вокруг закреплённых пар (score %d). Исходное сохранено в списке.", sched.Score))
+}
+
+func pinnedCount(sched *domain.Schedule) int {
+	n := 0
+	for _, a := range sched.Assignments {
+		if a.Pinned {
+			n++
+		}
+	}
+	return n
 }

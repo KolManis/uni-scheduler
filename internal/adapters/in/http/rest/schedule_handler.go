@@ -19,6 +19,8 @@ type scheduleService interface {
 	List(ctx context.Context) ([]domain.ScheduleSummary, error)
 	Delete(ctx context.Context, id int64) error
 	PatchAssignment(ctx context.Context, schedID int64, idx int, req app.PatchRequest) (*domain.Schedule, error)
+	SetPinned(ctx context.Context, schedID int64, idx int, pinned bool) (*domain.Schedule, error)
+	MoveOptions(ctx context.Context, schedID int64, idx int) ([]app.MoveOption, error)
 	ImportExcel(ctx context.Context, data *domain.ImportedData) (*domain.ImportResult, error)
 }
 
@@ -47,6 +49,7 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		SemesterHalf:   req.SemesterHalf,
 		ImproveAlgo:    req.ImproveAlgo,
 		ParallelStarts: req.ParallelStarts,
+		BaseScheduleID: req.BaseScheduleID,
 		Preferences: domain.SolverPreferences{
 			LectureBeforePractice:  req.LectureBeforePractice,
 			LecturePracticeSameDay: req.LecturePracticeSameDay,
@@ -169,6 +172,64 @@ func (h *ScheduleHandler) PatchAssignment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updated)
+}
+
+// parseIdx — номер пары в расписании из пути.
+func parseIdx(r *http.Request) (int, bool) {
+	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
+	return idx, err == nil && idx >= 0
+}
+
+func (h *ScheduleHandler) writeServiceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		writeError(w, http.StatusNotFound, "schedule not found")
+	case errors.Is(err, app.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// GET /api/v1/schedules/{id}/assignments/{idx}/options — куда можно перенести пару.
+func (h *ScheduleHandler) MoveOptions(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	idx, ok := parseIdx(r)
+	if err != nil || !ok {
+		writeError(w, http.StatusBadRequest, "invalid schedule id or assignment index")
+		return
+	}
+	opts, err := h.svc.MoveOptions(r.Context(), id, idx)
+	if err != nil {
+		h.writeServiceError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(opts)
+}
+
+// PUT /api/v1/schedules/{id}/assignments/{idx}/pinned — {"pinned": true|false}.
+func (h *ScheduleHandler) SetPinned(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	idx, ok := parseIdx(r)
+	if err != nil || !ok {
+		writeError(w, http.StatusBadRequest, "invalid schedule id or assignment index")
+		return
+	}
+	var req struct {
+		Pinned bool `json:"pinned"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	updated, err := h.svc.SetPinned(r.Context(), id, idx, req.Pinned)
+	if err != nil {
+		h.writeServiceError(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(updated)
 }

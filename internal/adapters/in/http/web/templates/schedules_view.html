@@ -11,12 +11,37 @@
   <div class="actions">
     <a class="btn secondary" hx-get="/ui/schedules" hx-target="#main" href="/ui/schedules">← к списку</a>
     <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/groups" hx-target="#main" href="/ui/schedules/{{$id}}/groups">По группам</a>
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/teachers" hx-target="#main" href="/ui/schedules/{{$id}}/teachers">По преподавателям</a>
     <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_teachers" target="_blank">Excel: все преподаватели</a>
     <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_groups" target="_blank">Excel: все группы</a>
   </div>
 </div>
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 {{if .Success}}<div class="banner success">{{.Success}}</div>{{end}}
+
+{{if .PinnedCount}}
+<div class="card" style="margin-bottom:12px;">
+  <b>Закреплено пар: {{.PinnedCount}}.</b>
+  <span class="muted">При перегенерации они останутся на своих местах, остальное расписание построится заново вокруг них. Исходное расписание сохранится.</span>
+  <form hx-post="/ui/schedules/{{$id}}/regenerate" hx-target="#main" hx-pending-text="Составляю…" class="form-row" style="margin-top:8px; align-items:flex-end;">
+    <div class="field">
+      <label>Метод улучшения</label>
+      <select name="improve_algo">
+        <option value="hillclimb">Iterated local search</option>
+        <option value="sa">Имитация отжига (SA)</option>
+        <option value="tabu">Табу-поиск</option>
+        <option value="ga">Генетический алгоритм</option>
+        <option value="lns">Разрушение-восстановление (LNS)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Таймаут, сек</label>
+      <input type="number" name="timeout_sec" value="120" min="30">
+    </div>
+    <div class="field"><button class="btn" type="submit">Перегенерировать вокруг закреплённых</button></div>
+  </form>
+</div>
+{{end}}
 
 <div class="card" style="margin-bottom:12px;">
   <h2 style="margin-top:0;">Качество расписания</h2>
@@ -99,7 +124,12 @@
       <td>{{roomLabel $rooms $buildings .RoomID}}</td>
       <td>{{.Parity}}</td>
       <td class="actions">
+        {{if .Pinned}}<span title="закреплена: не двигается при перегенерации">📌</span>{{end}}
         <a class="btn small secondary" hx-get="/ui/schedules/{{$id}}/assignments/{{.Idx}}/edit" hx-target="#main" href="/ui/schedules/{{$id}}/assignments/{{.Idx}}/edit">Изменить</a>
+        <form hx-post="/ui/schedules/{{$id}}/assignments/{{.Idx}}/pin" hx-target="#main" style="display:inline;">
+          <input type="hidden" name="pinned" value="{{if .Pinned}}false{{else}}true{{end}}">
+          <button class="btn small secondary" type="submit">{{if .Pinned}}Открепить{{else}}Закрепить{{end}}</button>
+        </form>
       </td>
     </tr>
     {{end}}

@@ -9,6 +9,7 @@
   <h1>{{.Schedule.Name}} <span class="muted">— по группам</span></h1>
   <div class="actions">
     <a class="btn secondary" hx-get="/ui/schedules/{{$id}}" hx-target="#main" href="/ui/schedules/{{$id}}">← по дням</a>
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/teachers" hx-target="#main" href="/ui/schedules/{{$id}}/teachers">По преподавателям</a>
     <a class="btn secondary" href="/api/v1/schedules/{{$id}}/excel?type=all_groups" target="_blank">Excel: все группы</a>
   </div>
 </div>
@@ -37,7 +38,7 @@
       <td>
         {{range .Items}}
         <div style="margin-bottom:4px;">
-          <b>{{subjectName $subjectPlans .SubjectID}}</b> ({{.Type}})<br>
+          <b>{{subjectName $subjectPlans .SubjectID}}</b> ({{.Type}}){{if .Pinned}} <span title="закреплена">📌</span>{{end}}<br>
           {{teacherName $teachers .TeacherID}}<br>
           ауд. {{roomLabel $rooms $buildings .RoomID}}
           {{if ne .Parity "always"}}<br><span class="muted">{{.Parity}}</span>{{end}}

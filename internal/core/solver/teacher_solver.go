@@ -126,8 +126,19 @@ func ParseConstruction(s string) (Construction, bool) {
 // Параметры seed и budget — как у SolveTeacherWithBudget.
 func SolveWithBudget(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
 	seed int64, budget time.Duration) (*domain.Schedule, error) {
+	return SolveWithFixed(input, construct, maxIter, improve, seed, budget, nil)
+}
+
+// SolveWithFixed — как SolveWithBudget, но пары fixed стоят заранее и не двигаются
+// (закреплены человеком): построение ставит остальные пары вокруг них, улучшение их не
+// трогает. Часы закреплённых пар засчитываются в план, повторно они не ставятся.
+func SolveWithFixed(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
+	seed int64, budget time.Duration, fixed []domain.Assignment) (*domain.Schedule, error) {
 	input = normalizeInput(input)
 	state := newTeacherState(input)
+	for _, a := range fixed {
+		placeFixed(state, a)
+	}
 
 	var rng *rand.Rand
 	if seed != 0 {
@@ -162,6 +173,32 @@ func SolveWithBudget(input domain.InputData, construct Construction, maxIter int
 		Assignments: improved,
 		Score:       score,
 	}, nil
+}
+
+// placeFixed ставит закреплённую пару как есть: занимает преподавателя, группы и
+// аудиторию и засчитывает её часы в план.
+func placeFixed(state *teacherState, a domain.Assignment) {
+	a.Pinned = true
+	if a.Parity == "" {
+		a.Parity = domain.Always
+	}
+	state.assignments = append(state.assignments, a)
+	if state.subjectCount[a.SubjectID] == nil {
+		state.subjectCount[a.SubjectID] = make(map[domain.ClassType]int)
+	}
+	state.subjectCount[a.SubjectID][a.Type] += 2
+	occupy := func(m map[domain.TimeSlot]map[string]domain.Parity, id string) {
+		if m[a.TimeSlot] == nil {
+			m[a.TimeSlot] = make(map[string]domain.Parity)
+		}
+		m[a.TimeSlot][id] = mergeParity(m[a.TimeSlot][id], a.Parity)
+	}
+	for _, gid := range a.GroupIDs {
+		occupy(state.occupiedGroups, gid)
+	}
+	occupy(state.occupiedTeachers, a.TeacherID)
+	occupy(state.occupiedRooms, a.RoomID)
+	state.teacherSlots[a.TeacherID] = append(state.teacherSlots[a.TeacherID], a.TimeSlot)
 }
 
 // constructByTeacher — построение по преподавателям: от самых ограниченных к самым

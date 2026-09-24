@@ -22,8 +22,14 @@ func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve Improve
 
 // SolveMultiStart — многостартовый поиск с выбранным алгоритмом построения.
 func SolveMultiStart(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm, starts int, budget time.Duration) (*domain.Schedule, error) {
+	return SolveMultiStartFixed(input, construct, maxIter, improve, starts, budget, nil)
+}
+
+// SolveMultiStartFixed — многостартовый поиск вокруг закреплённых пар fixed (см. SolveWithFixed).
+func SolveMultiStartFixed(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
+	starts int, budget time.Duration, fixed []domain.Assignment) (*domain.Schedule, error) {
 	if starts <= 1 {
-		return SolveWithBudget(input, construct, maxIter, improve, 0, budget)
+		return SolveWithFixed(input, construct, maxIter, improve, 0, budget, fixed)
 	}
 
 	type result struct {
@@ -49,7 +55,7 @@ func SolveMultiStart(input domain.InputData, construct Construction, maxIter int
 		wg.Add(1)
 		go func(idx int, s int64) {
 			defer wg.Done()
-			sched, err := SolveWithBudget(input, construct, maxIter, improve, s, budget)
+			sched, err := SolveWithFixed(input, construct, maxIter, improve, s, budget, fixed)
 			results[idx] = result{sched: sched, err: err, seed: s}
 		}(i, seed)
 	}
