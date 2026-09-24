@@ -1,4 +1,6 @@
-package app
+// Package rules — правила расписания, общие для нескольких сценариев: жёсткие ограничения
+// для ручного переноса и подсказок (conflicts.go), расчёт нагрузки (load.go).
+package rules
 
 import (
 	"fmt"
@@ -30,60 +32,60 @@ func (e *ConflictError) Error() string {
 	return fmt.Sprintf("conflict: %s resource=%s with_idx=%d", e.Type, e.ResourceID, e.ConflictWith)
 }
 
-// moveConflict — что помешает поставить пару m на место пары idx. nil — ничего.
+// Check — что помешает поставить пару m на место пары idx. nil — ничего.
 //
 // Порядок проверок: недоступность преподавателя, его пары на других факультетах, затем
 // преподаватель и группы по всем парам расписания, аудитория — последней. Занятая
 // аудитория поправима (можно взять другую) и не должна заслонять неустранимый конфликт.
 // ignoreRoom — не проверять аудиторию вовсе (её подберут отдельно).
-func moveConflict(assignments []domain.Assignment, idx int, m domain.Assignment, teachers []domain.Teacher, ignoreRoom bool) *ConflictError {
-	if isTeacherUnavailable(teachers, m.TeacherID, m.TimeSlot) {
+func Check(assignments []domain.Assignment, idx int, m domain.Assignment, teachers []domain.Teacher, ignoreRoom bool) *ConflictError {
+	if IsTeacherUnavailable(teachers, m.TeacherID, m.TimeSlot) {
 		return &ConflictError{Type: ConflictTeacherUnavailable, ResourceID: m.TeacherID, ConflictWith: -1}
 	}
-	if ep := externalPairAt(teachers, m.TeacherID, m.TimeSlot, m.Parity); ep != nil {
+	if ep := ExternalPairAt(teachers, m.TeacherID, m.TimeSlot, m.Parity); ep != nil {
 		return &ConflictError{Type: ConflictTeacherExternalPair, ResourceID: m.TeacherID,
 			ConflictWith: -1, Detail: ep.Note, Parity: ep.Parity}
 	}
 	for j, a := range assignments {
-		if j == idx || !sameWeekSlot(m, a) {
+		if j == idx || !SameWeekSlot(m, a) {
 			continue
 		}
 		if a.TeacherID == m.TeacherID {
 			return &ConflictError{Type: ConflictTeacherBusy, ResourceID: m.TeacherID, ConflictWith: j}
 		}
-		if g := sharedGroup(m.GroupIDs, a.GroupIDs); g != "" {
+		if g := SharedGroup(m.GroupIDs, a.GroupIDs); g != "" {
 			return &ConflictError{Type: ConflictGroupBusy, ResourceID: g, ConflictWith: j}
 		}
 	}
 	if ignoreRoom {
 		return nil
 	}
-	return roomConflict(assignments, idx, m)
+	return RoomBusy(assignments, idx, m)
 }
 
-// roomConflict — аудитория пары m занята другой парой в тот же слот и неделю.
-func roomConflict(assignments []domain.Assignment, idx int, m domain.Assignment) *ConflictError {
+// RoomBusy — аудитория пары m занята другой парой в тот же слот и неделю.
+func RoomBusy(assignments []domain.Assignment, idx int, m domain.Assignment) *ConflictError {
 	for j, a := range assignments {
-		if j != idx && a.RoomID == m.RoomID && sameWeekSlot(m, a) {
+		if j != idx && a.RoomID == m.RoomID && SameWeekSlot(m, a) {
 			return &ConflictError{Type: ConflictRoomBusy, ResourceID: m.RoomID, ConflictWith: j}
 		}
 	}
 	return nil
 }
 
-// sameWeekSlot — пары стоят в одном слоте и идут хотя бы в одну общую неделю.
-func sameWeekSlot(a, b domain.Assignment) bool {
-	return a.TimeSlot == b.TimeSlot && weeksOverlap(a.Parity, b.Parity)
+// SameWeekSlot — пары стоят в одном слоте и идут хотя бы в одну общую неделю.
+func SameWeekSlot(a, b domain.Assignment) bool {
+	return a.TimeSlot == b.TimeSlot && WeeksOverlap(a.Parity, b.Parity)
 }
 
-// weeksOverlap — пары с чётностями a и b идут хотя бы в одну общую неделю.
+// WeeksOverlap — пары с чётностями a и b идут хотя бы в одну общую неделю.
 // Пустая чётность — «каждую неделю».
-func weeksOverlap(a, b domain.Parity) bool {
+func WeeksOverlap(a, b domain.Parity) bool {
 	return a == "" || b == "" || a == domain.Always || b == domain.Always || a == b
 }
 
-// sharedGroup — первая группа, которая есть в обоих списках; "" — общих нет.
-func sharedGroup(a, b []string) string {
+// SharedGroup — первая группа, которая есть в обоих списках; "" — общих нет.
+func SharedGroup(a, b []string) string {
 	for _, x := range a {
 		for _, y := range b {
 			if x == y {
@@ -94,9 +96,9 @@ func sharedGroup(a, b []string) string {
 	return ""
 }
 
-// isTeacherUnavailable — слот входит в недоступные слоты преподавателя.
-func isTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot) bool {
-	t := findTeacher(teachers, teacherID)
+// IsTeacherUnavailable — слот входит в недоступные слоты преподавателя.
+func IsTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot) bool {
+	t := FindTeacher(teachers, teacherID)
 	if t == nil {
 		return false
 	}
@@ -108,26 +110,42 @@ func isTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot doma
 	return false
 }
 
-// externalPairAt — пара преподавателя на другом факультете в этом слоте, идущая хотя бы
+// ExternalPairAt — пара преподавателя на другом факультете в этом слоте, идущая хотя бы
 // в одну неделю с парой чётности parity; nil — такой нет.
-func externalPairAt(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot, parity domain.Parity) *domain.ExternalPair {
-	t := findTeacher(teachers, teacherID)
+func ExternalPairAt(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot, parity domain.Parity) *domain.ExternalPair {
+	t := FindTeacher(teachers, teacherID)
 	if t == nil {
 		return nil
 	}
 	for k, ep := range t.ExternalPairs {
-		if ep.TimeSlot == slot && weeksOverlap(ep.Parity, parity) {
+		if ep.TimeSlot == slot && WeeksOverlap(ep.Parity, parity) {
 			return &t.ExternalPairs[k]
 		}
 	}
 	return nil
 }
 
-func findTeacher(teachers []domain.Teacher, id string) *domain.Teacher {
+// FindTeacher — преподаватель по id; nil — нет в справочнике.
+func FindTeacher(teachers []domain.Teacher, id string) *domain.Teacher {
 	for k := range teachers {
 		if teachers[k].ID == id {
 			return &teachers[k]
 		}
 	}
 	return nil
+}
+
+// FreeRoom — аудитория для пары moved на месте пары idx: своя, если свободна, иначе первая
+// свободная из rooms (подходящих по типу, вместимости и корпусам). false — свободной нет.
+func FreeRoom(assignments []domain.Assignment, idx int, moved domain.Assignment, rooms []domain.Room) (domain.Room, bool) {
+	if RoomBusy(assignments, idx, moved) == nil {
+		return domain.Room{ID: moved.RoomID, BuildingID: moved.BuildingID}, true
+	}
+	for _, r := range rooms {
+		moved.RoomID = r.ID
+		if RoomBusy(assignments, idx, moved) == nil {
+			return r, true
+		}
+	}
+	return domain.Room{}, false
 }

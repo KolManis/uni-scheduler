@@ -1,40 +1,36 @@
 package rest
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/KolManis/uni-scheduler/internal/core/app"
+	"github.com/KolManis/uni-scheduler/internal/core/application"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/deleteschedule"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/generateschedule"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/moveassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/pinassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/generation"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/getschedule"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/moveoptions"
+	"github.com/KolManis/uni-scheduler/internal/core/application/rules"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 	"github.com/gorilla/mux"
 )
 
-// scheduleService — интерфейс для работы с расписаниями.
-type scheduleService interface {
-	GenerateSchedule(ctx context.Context, cmd app.GenerateCommand) (*domain.Schedule, error)
-	GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error)
-	ListSchedules(ctx context.Context) ([]domain.ScheduleSummary, error)
-	DeleteSchedule(ctx context.Context, id int64) error
-	MoveAssignment(ctx context.Context, cmd app.MoveAssignmentCommand) (*domain.Schedule, error)
-	PinAssignment(ctx context.Context, cmd app.PinAssignmentCommand) (*domain.Schedule, error)
-	CheckInput(ctx context.Context) ([]app.InputProblem, error)
-	MoveOptions(ctx context.Context, schedID int64, idx int) ([]app.MoveOption, error)
-	ImportExcel(ctx context.Context, data *domain.ImportedData) (*domain.ImportResult, error)
-}
-
-// ScheduleHandler обрабатывает HTTP-запросы к расписаниям.
+// ScheduleHandler — переводчик HTTP ↔ сценарии работы с расписаниями. Каждый метод:
+// разобрать запрос → собрать команду или запрос → вызвать обработчик → ответить.
 type ScheduleHandler struct {
-	svc scheduleService
+	uc application.UseCases
 }
 
-func NewScheduleHandler(svc scheduleService) *ScheduleHandler {
-	return &ScheduleHandler{svc: svc}
+func NewScheduleHandler(uc application.UseCases) *ScheduleHandler {
+	return &ScheduleHandler{uc: uc}
 }
 
-// POST /api/v1/schedules/generate
+// POST /api/v1/schedules/generate — 201 и расписание целиком.
 func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	var req GenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -42,7 +38,7 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.GenerateSchedule(r.Context(), app.GenerateCommand{
+	cmd, err := generateschedule.NewCommand(generation.Request{
 		Name:           req.Name,
 		MaxIterations:  req.MaxIterations,
 		SolverType:     req.SolverType,
@@ -58,35 +54,29 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
-		if errors.Is(err, app.ErrInvalidInput) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if errors.Is(err, domain.ErrNoSolution) {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeServiceError(w, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(result)
+	result, err := h.uc.GenerateSchedule.Handle(r.Context(), cmd)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusCreated, result)
 }
 
-// GET /api/v1/schedules
+// GET /api/v1/schedules — список без пар, свежие сверху.
 func (h *ScheduleHandler) List(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.ListSchedules(r.Context())
+	list, err := h.uc.ListSchedules.Handle(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeServiceError(w, err)
 		return
 	}
 	if list == nil {
-		list = []domain.ScheduleSummary{}
+		list = []domain.ScheduleSummary{} // [] вместо null
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(list)
+	writeJSONStatus(w, http.StatusOK, list)
 }
 
 // GET /api/v1/schedules/{id}
@@ -96,128 +86,91 @@ func (h *ScheduleHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-
-	result, err := h.svc.GetSchedule(r.Context(), id)
+	q, err := getschedule.NewQuery(id)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "schedule not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeServiceError(w, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	result, err := h.uc.GetSchedule.Handle(r.Context(), q)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, result)
 }
 
-// DELETE /api/v1/schedules/{id}
+// DELETE /api/v1/schedules/{id} — 204.
 func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-
-	if err := h.svc.DeleteSchedule(r.Context(), id); err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "schedule not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+	cmd, err := deleteschedule.NewCommand(id)
+	if err != nil {
+		writeServiceError(w, err)
 		return
 	}
 
+	if err := h.uc.DeleteSchedule.Handle(r.Context(), cmd); err != nil {
+		writeServiceError(w, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// PATCH /api/v1/schedules/{id}/assignments/{idx}
+// PATCH /api/v1/schedules/{id}/assignments/{idx} — перенести пару; 409 — конфликт.
 func (h *ScheduleHandler) PatchAssignment(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid schedule id")
+	id, idx, ok := parseAssignment(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid schedule id or assignment index")
 		return
 	}
-
-	idxStr := mux.Vars(r)["idx"]
-	idx, err := strconv.Atoi(idxStr)
-	if err != nil || idx < 0 {
-		writeError(w, http.StatusBadRequest, "invalid assignment index")
-		return
-	}
-
 	var req PatchAssignmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-
-	updated, err := h.svc.MoveAssignment(r.Context(), app.MoveAssignmentCommand{
-		ScheduleID: id,
-		Index:      idx,
-		TimeSlot:   req.TimeSlot,
-		RoomID:     req.RoomID,
-		Parity:     domain.Parity(req.Parity),
-	})
+	cmd, err := moveassignment.NewCommand(id, idx, req.TimeSlot, req.RoomID, domain.Parity(req.Parity))
 	if err != nil {
-		var conflict *app.ConflictError
-		if errors.As(err, &conflict) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(conflict)
-			return
-		}
-		if errors.Is(err, domain.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "schedule not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeServiceError(w, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updated)
-}
-
-// parseIdx — номер пары в расписании из пути.
-func parseIdx(r *http.Request) (int, bool) {
-	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
-	return idx, err == nil && idx >= 0
-}
-
-func (h *ScheduleHandler) writeServiceError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, domain.ErrNotFound):
-		writeError(w, http.StatusNotFound, "schedule not found")
-	case errors.Is(err, app.ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, err.Error())
-	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+	updated, err := h.uc.MoveAssignment.Handle(r.Context(), cmd)
+	if err != nil {
+		writeServiceError(w, err)
+		return
 	}
+	writeJSONStatus(w, http.StatusOK, updated)
 }
 
 // GET /api/v1/schedules/{id}/assignments/{idx}/options — куда можно перенести пару.
 func (h *ScheduleHandler) MoveOptions(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
-	idx, ok := parseIdx(r)
-	if err != nil || !ok {
+	id, idx, ok := parseAssignment(r)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid schedule id or assignment index")
 		return
 	}
-	opts, err := h.svc.MoveOptions(r.Context(), id, idx)
+	q, err := moveoptions.NewQuery(id, idx)
 	if err != nil {
-		h.writeServiceError(w, err)
+		writeServiceError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(opts)
+
+	opts, err := h.uc.MoveOptions.Handle(r.Context(), q)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, opts)
 }
 
 // PUT /api/v1/schedules/{id}/assignments/{idx}/pinned — {"pinned": true|false}.
 func (h *ScheduleHandler) SetPinned(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
-	idx, ok := parseIdx(r)
-	if err != nil || !ok {
+	id, idx, ok := parseAssignment(r)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid schedule id or assignment index")
 		return
 	}
@@ -228,27 +181,31 @@ func (h *ScheduleHandler) SetPinned(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-	updated, err := h.svc.PinAssignment(r.Context(), app.PinAssignmentCommand{ScheduleID: id, Index: idx, Pinned: req.Pinned})
+	cmd, err := pinassignment.NewCommand(id, idx, req.Pinned)
 	if err != nil {
-		h.writeServiceError(w, err)
+		writeServiceError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updated)
+
+	updated, err := h.uc.PinAssignment.Handle(r.Context(), cmd)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, updated)
 }
 
 // GET /api/v1/input/check — ошибки в справочниках и планах до генерации.
 func (h *ScheduleHandler) CheckInput(w http.ResponseWriter, r *http.Request) {
-	problems, err := h.svc.CheckInput(r.Context())
+	problems, err := h.uc.CheckInput.Handle(r.Context())
 	if err != nil {
-		h.writeServiceError(w, err)
+		writeServiceError(w, err)
 		return
 	}
 	if problems == nil {
-		problems = []app.InputProblem{} // [] вместо null
+		problems = []checkinput.Problem{} // [] вместо null
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(problems)
+	writeJSONStatus(w, http.StatusOK, problems)
 }
 
 // --- helpers ---
@@ -257,8 +214,42 @@ func parseID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
 }
 
-func writeError(w http.ResponseWriter, status int, message string) {
+// parseAssignment — номер расписания и номер пары из пути.
+func parseAssignment(r *http.Request) (int64, int, bool) {
+	id, err := parseID(r)
+	if err != nil {
+		return 0, 0, false
+	}
+	idx, err := strconv.Atoi(mux.Vars(r)["idx"])
+	if err != nil || idx < 0 {
+		return 0, 0, false
+	}
+	return id, idx, true
+}
+
+// writeServiceError переводит ошибку сценария в HTTP-статус.
+func writeServiceError(w http.ResponseWriter, err error) {
+	var conflict *rules.ConflictError
+	switch {
+	case errors.As(err, &conflict):
+		writeJSONStatus(w, http.StatusConflict, conflict)
+	case errors.Is(err, domain.ErrNotFound):
+		writeError(w, http.StatusNotFound, "schedule not found")
+	case errors.Is(err, domain.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, domain.ErrNoSolution):
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+	json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSONStatus(w, status, map[string]string{"error": message})
 }

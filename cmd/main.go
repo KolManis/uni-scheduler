@@ -13,7 +13,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/adapters/in/http/rest"
 	"github.com/KolManis/uni-scheduler/internal/adapters/in/http/web"
 	"github.com/KolManis/uni-scheduler/internal/adapters/out/postgres"
-	"github.com/KolManis/uni-scheduler/internal/core/app"
+	"github.com/KolManis/uni-scheduler/internal/core/application"
 )
 
 func main() {
@@ -45,14 +45,15 @@ func main() {
 	importRepo := postgres.NewImportRepository(pool)
 	refWriteRepo := postgres.NewRefWriteRepository(pool)
 
-	svc := app.NewService(inputRepo, outputRepo, importRepo)
+	// Сценарии (команды и запросы) поверх хранилищ; адаптеры берут из них нужные.
+	uc := application.NewUseCases(inputRepo, outputRepo, importRepo)
 
-	scheduleHandler := rest.NewScheduleHandler(svc)
-	excelHandler := rest.NewExcelHandler(svc, inputRepo)
-	importHandler := rest.NewImportHandler(svc)
+	scheduleHandler := rest.NewScheduleHandler(uc)
+	excelHandler := rest.NewExcelHandler(uc.GetSchedule, inputRepo)
+	importHandler := rest.NewImportHandler(uc.ImportExcel)
 	referenceHandler := rest.NewReferenceHandler(inputRepo)
 	refWriteHandler := rest.NewRefWriteHandler(refWriteRepo)
-	webHandler := web.NewHandler(inputRepo, refWriteRepo, svc)
+	webHandler := web.NewHandler(inputRepo, refWriteRepo, uc)
 
 	router := httpTransport.NewRouter(scheduleHandler, excelHandler, importHandler, referenceHandler, refWriteHandler, webHandler)
 

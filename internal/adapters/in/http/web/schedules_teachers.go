@@ -109,7 +109,7 @@ func (h *Handler) schedulesTeachersView(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
-	sched, err := h.svc.GetSchedule(r.Context(), id)
+	sched, err := h.schedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)

@@ -1,21 +1,22 @@
-package app
+package checkinput
 
 import (
 	"context"
 	"strings"
 	"testing"
 
+	"github.com/KolManis/uni-scheduler/internal/core/application/testfakes"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
-func TestCheckInput(t *testing.T) {
+func TestHandle(t *testing.T) {
 	var everySlot []domain.TimeSlot
 	for _, d := range domain.AllDays {
 		for p := 1; p <= 6; p++ {
 			everySlot = append(everySlot, domain.MustNewTimeSlot(d, p))
 		}
 	}
-	input := &fakeInputRepo{data: domain.InputData{
+	input := &testfakes.InputRepo{Data: domain.InputData{
 		Groups: []domain.Group{{ID: "G1", Name: "ИВТ-1", StudentCount: 50}},
 		Teachers: []domain.Teacher{
 			{ID: "T1", Name: "Иванов"},
@@ -28,9 +29,9 @@ func TestCheckInput(t *testing.T) {
 			{ID: "P3", Name: "Занятой преподаватель", TeacherID: "T2", GroupIDs: []string{"G1"}, LabHours: 3, RequiresRoomType: "lecture"},
 		},
 	}}
-	svc := NewService(input, &fakeOutputRepo{}, nil)
+	handler := NewHandler(input)
 
-	problems, err := svc.CheckInput(context.Background())
+	problems, err := handler.Handle(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,20 +49,5 @@ func TestCheckInput(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("нет проблемы %q\nнайдено:\n%s", want, all)
 		}
-	}
-}
-
-func TestExplainUnplaced(t *testing.T) {
-	data := domain.InputData{
-		Groups:   []domain.Group{{ID: "G1", StudentCount: 20}},
-		Teachers: []domain.Teacher{{ID: "T1"}},
-		Rooms:    []domain.Room{{ID: "R1", Capacity: 10, Type: "lab"}},
-		SubjectPlans: []domain.SubjectPlan{
-			{ID: "P1", TeacherID: "T1", GroupIDs: []string{"G1"}, LabHours: 2, RequiresRoomType: "lab"},
-		},
-	}
-	items := explainUnplaced([]domain.UnplacedItem{{SubjectID: "P1", Type: domain.Lab, MissingHours: 2}}, nil, data)
-	if want := "нет аудитории типа «lab» на 20 мест в допустимых корпусах"; items[0].Reason != want {
-		t.Errorf("причина: %q, ожидалось %q", items[0].Reason, want)
 	}
 }

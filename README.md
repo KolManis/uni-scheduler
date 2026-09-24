@@ -46,7 +46,8 @@ make package   # dist/uni-scheduler.tar.gz: образы, compose, миграц�
 cmd/                         точка входа
 cmd/bench/                   бенчмарк солвера на данных из БД
 internal/core/domain/        доменные типы
-internal/core/app/           сценарии: command_*.go меняют данные, query_*.go только читают
+internal/core/application/   сценарии: commands/<сценарий>/ меняют данные, queries/<запрос>/ только читают;
+                             generation/ и rules/ — общее для нескольких сценариев
 internal/core/ports/         интерфейсы хранилищ
 internal/core/solver/        алгоритм составления расписания
 internal/adapters/in/http/   REST API и веб-интерфейс

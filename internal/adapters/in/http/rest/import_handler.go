@@ -1,26 +1,20 @@
 package rest
 
 import (
-	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 
 	"github.com/KolManis/uni-scheduler/internal/adapters/in/excel"
-	"github.com/KolManis/uni-scheduler/internal/core/domain"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/importexcel"
 )
 
-type importService interface {
-	ImportExcel(ctx context.Context, data *domain.ImportedData) (*domain.ImportResult, error)
-}
-
-// ImportHandler обрабатывает импорт данных из Excel.
+// ImportHandler — переводчик HTTP (файл xlsx) → команда importexcel → HTTP.
 type ImportHandler struct {
-	svc importService
+	importExcel *importexcel.Handler
 }
 
-func NewImportHandler(svc importService) *ImportHandler {
-	return &ImportHandler{svc: svc}
+func NewImportHandler(importExcel *importexcel.Handler) *ImportHandler {
+	return &ImportHandler{importExcel: importExcel}
 }
 
 // ImportExcel godoc
@@ -51,14 +45,17 @@ func (h *ImportHandler) ImportExcel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.ImportExcel(r.Context(), data)
+	cmd, err := importexcel.NewCommand(data)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeServiceError(w, err)
+		return
+	}
+	result, err := h.importExcel.Handle(r.Context(), cmd)
+	if err != nil {
+		writeServiceError(w, err)
 		return
 	}
 
 	result.Warnings = append(result.Warnings, warnings...)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	writeJSONStatus(w, http.StatusOK, result)
 }

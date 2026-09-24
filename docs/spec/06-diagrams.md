@@ -38,7 +38,7 @@ flowchart TB
     XL["excel<br/>разбор xlsx"]
   end
   subgraph core["Ядро — internal/core"]
-    APP["app<br/>сценарии: генерация,<br/>перенос, импорт"]
+    APP["application<br/>команды и запросы:<br/>генерация, перенос, импорт…"]
     SOLVER["solver<br/>построение, поиск, оценка"]
     DOMAIN["domain<br/>типы"]
     PORTS["ports<br/>интерфейсы хранилищ"]
@@ -65,20 +65,20 @@ flowchart TB
 sequenceDiagram
   participant C as Клиент
   participant H as REST или веб
-  participant S as app.Service
+  participant S as generateschedule.Handler
   participant IR as InputRepository
   participant SL as solver
   participant OR as OutputRepository
 
   C->>H: POST generate {name, timeout_sec, solver_type, improve_algo, правила}
-  H->>S: Generate(input)
-  S->>S: проверить solver_type
+  H->>H: generateschedule.NewCommand — проверить solver_type, значения по умолчанию
+  H->>S: Handle(команда)
   S->>IR: LoadInput()
   IR-->>S: справочники и планы
   S->>SL: SolveMultiStart(данные + правила, построение, бюджет = таймаут − 15 с)
   Note over SL: нормализация порядка → построение →<br/>вставка непоставленных → сходимость → метаэвристика
   SL-->>S: пары, score
-  S->>SL: ComputeUnplaced(пары, данные)
+  S->>SL: ComputeUnplaced(пары, данные) + причины неразмещения
   S->>OR: SaveSchedule(пары, score, unplaced, options)
   Note over S,OR: генерация и сохранение не зависят от запроса:<br/>закрытая вкладка их не прерывает
   OR-->>S: сохранённое расписание
@@ -94,12 +94,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant C as Клиент
-  participant S as app.Service
+  participant S as moveassignment.Handler
   participant OR as OutputRepository
   participant IR as InputRepository
   participant SL as solver
 
-  C->>S: PatchAssignment(id, idx, {слот, аудитория, чётность})
+  C->>S: Handle(moveassignment.Command{id, idx, слот, аудитория, чётность})
   S->>OR: GetSchedule(id)
   S->>IR: LoadInput()
   alt слот недоступен преподавателю
@@ -120,13 +120,13 @@ sequenceDiagram
   participant C as Клиент
   participant H as rest.ImportHandler
   participant P as excel
-  participant S as app.Service
+  participant S as importexcel.Handler
   participant R as ImportRepository
 
   C->>H: POST /import/excel (xlsx)
   H->>P: разобрать лист
   P-->>H: преподаватели, группы, аудитории, планы
-  H->>S: ImportExcel(данные)
+  H->>S: Handle(importexcel.Command{данные})
   S->>R: UpsertAll
   R-->>C: 200 {создано/обновлено по сущностям, предупреждения}
 ```

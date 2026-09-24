@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -11,21 +10,19 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/xuri/excelize/v2"
 
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/getschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 	"github.com/KolManis/uni-scheduler/internal/core/ports"
 )
 
-type excelScheduleService interface {
-	GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error)
-}
-
+// ExcelHandler — выгрузка расписания в Excel: запрос getschedule плюс справочники для подписей.
 type ExcelHandler struct {
-	usecase   excelScheduleService
-	inputRepo ports.InputRepository
+	getSchedule *getschedule.Handler
+	inputRepo   ports.InputRepository
 }
 
-func NewExcelHandler(usecase excelScheduleService, inputRepo ports.InputRepository) *ExcelHandler {
-	return &ExcelHandler{usecase: usecase, inputRepo: inputRepo}
+func NewExcelHandler(getSchedule *getschedule.Handler, inputRepo ports.InputRepository) *ExcelHandler {
+	return &ExcelHandler{getSchedule: getSchedule, inputRepo: inputRepo}
 }
 
 func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +42,12 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		weekParam = "both"
 	}
 
-	sched, err := h.usecase.GetSchedule(r.Context(), scheduleID)
+	q, err := getschedule.NewQuery(scheduleID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	sched, err := h.getSchedule.Handle(r.Context(), q)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "schedule not found")
 		return

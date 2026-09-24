@@ -3,7 +3,7 @@ package web
 import (
 	"testing"
 
-	"github.com/KolManis/uni-scheduler/internal/core/app"
+	"github.com/KolManis/uni-scheduler/internal/core/application/rules"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
@@ -30,7 +30,7 @@ func TestBuildDayGroups_ExternalPairs(t *testing.T) {
 }
 
 func TestConflictMessage_ExternalPair(t *testing.T) {
-	msg := conflictMessage(&app.ConflictError{Type: app.ConflictTeacherExternalPair, Detail: "ФИТ, 305", Parity: domain.Odd})
+	msg := conflictMessage(&rules.ConflictError{Type: rules.ConflictTeacherExternalPair, Detail: "ФИТ, 305", Parity: domain.Odd})
 	want := "Конфликт: у преподавателя в это время пара на другом факультете: ФИТ, 305 (нечётная неделя)"
 	if msg != want {
 		t.Errorf("получено %q", msg)

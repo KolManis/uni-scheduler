@@ -7,13 +7,22 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/KolManis/uni-scheduler/internal/core/app"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/deleteschedule"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/generateallmethods"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/generateschedule"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/moveassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/pinassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/generation"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/evaluateschedule"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/moveoptions"
+	"github.com/KolManis/uni-scheduler/internal/core/application/rules"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
 type schedulesListData struct {
 	Schedules       []domain.ScheduleSummary
-	Problems        []app.InputProblem // проверка данных до генерации
+	Problems        []checkinput.Problem // проверка данных до генерации
 	ProblemErrors   int
 	ProblemWarnings int
 	Error           string
@@ -23,13 +32,13 @@ type schedulesListData struct {
 // withProblems дописывает к странице списка результат проверки данных. Если проверка
 // не удалась, страница показывается без неё: генерации это не мешает.
 func (h *Handler) withProblems(r *http.Request, d schedulesListData) schedulesListData {
-	problems, err := h.svc.CheckInput(r.Context())
+	problems, err := h.uc.CheckInput.Handle(r.Context())
 	if err != nil {
 		return d
 	}
 	d.Problems = problems
 	for _, p := range problems {
-		if p.Severity == app.ProblemError {
+		if p.Severity == checkinput.ProblemError {
 			d.ProblemErrors++
 		} else {
 			d.ProblemWarnings++
@@ -167,7 +176,7 @@ func (h *Handler) schedulesGroupsView(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	sched, err := h.svc.GetSchedule(r.Context(), id)
+	sched, err := h.schedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)
@@ -220,8 +229,8 @@ type moveRow struct {
 }
 
 // buildMoveGrid раскладывает варианты переноса в сетку «пара × день».
-func buildMoveGrid(opts []app.MoveOption, currentRoom string) []moveRow {
-	bySlot := make(map[domain.TimeSlot]app.MoveOption, len(opts))
+func buildMoveGrid(opts []moveoptions.Option, currentRoom string) []moveRow {
+	bySlot := make(map[domain.TimeSlot]moveoptions.Option, len(opts))
 	for _, o := range opts {
 		bySlot[o.Slot] = o
 	}
@@ -249,11 +258,11 @@ func buildMoveGrid(opts []app.MoveOption, currentRoom string) []moveRow {
 }
 
 // shortConflict — причина, по которой в слот нельзя, в два-три слова для клетки сетки.
-func shortConflict(c *app.ConflictError) string {
+func shortConflict(c *rules.ConflictError) string {
 	switch c.Type {
-	case app.ConflictTeacherUnavailable:
+	case rules.ConflictTeacherUnavailable:
 		return "преподаватель недоступен"
-	case app.ConflictTeacherExternalPair:
+	case rules.ConflictTeacherExternalPair:
 		return "другой факультет"
 	case "teacher_busy":
 		return "преподаватель занят"
@@ -266,7 +275,7 @@ func shortConflict(c *app.ConflictError) string {
 }
 
 // moveEffects — что изменит перенос, человеческими словами: «−1 окно, +1 день с одной парой».
-func moveEffects(o app.MoveOption, currentRoom string) string {
+func moveEffects(o moveoptions.Option, currentRoom string) string {
 	var parts []string
 	add := func(n int, what string) {
 		if n != 0 {
@@ -341,7 +350,7 @@ func buildDayGroups(sched *domain.Schedule, teachers []domain.Teacher) []dayGrou
 }
 
 func (h *Handler) loadSchedulesList(w http.ResponseWriter, r *http.Request, status int, errMsg string) {
-	list, err := h.svc.ListSchedules(r.Context())
+	list, err := h.uc.ListSchedules.Handle(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -357,7 +366,7 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 	if !parseForm(w, r) {
 		return
 	}
-	in := app.GenerateCommand{
+	req := generation.Request{
 		Name:           r.FormValue("name"),
 		SolverType:     r.FormValue("solver_type"),
 		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 30),
@@ -373,13 +382,18 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 
 	// Специальное значение "all" — запускаем ВСЕ методы параллельно, сохраняем каждый
 	// как отдельное расписание. Пользователь потом сравнивает их в списке.
-	if in.ImproveAlgo == "all" {
-		saved, err := h.svc.GenerateAllMethods(r.Context(), in)
+	if req.ImproveAlgo == "all" {
+		cmd, err := generateallmethods.NewCommand(req)
+		if err != nil {
+			h.loadSchedulesList(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		saved, err := h.uc.GenerateAllMethods.Handle(r.Context(), cmd)
 		if err != nil {
 			h.loadSchedulesList(w, r, http.StatusUnprocessableEntity, "Не удалось сгенерировать все методы: "+err.Error())
 			return
 		}
-		list, err := h.svc.ListSchedules(r.Context())
+		list, err := h.uc.ListSchedules.Handle(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -399,12 +413,17 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sched, err := h.svc.GenerateSchedule(r.Context(), in)
+	cmd, err := generateschedule.NewCommand(req)
+	if err != nil {
+		h.loadSchedulesList(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+	sched, err := h.uc.GenerateSchedule.Handle(r.Context(), cmd)
 	if err != nil {
 		h.loadSchedulesList(w, r, http.StatusUnprocessableEntity, "Не удалось сгенерировать расписание: "+err.Error())
 		return
 	}
-	list, err := h.svc.ListSchedules(r.Context())
+	list, err := h.uc.ListSchedules.Handle(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -420,7 +439,7 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id int64, status int, errMsg, successMsg string) {
-	sched, err := h.svc.GetSchedule(r.Context(), id)
+	sched, err := h.schedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)
@@ -434,10 +453,11 @@ func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id in
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	eval := h.uc.EvaluateSchedule.Handle(evaluateschedule.Query{Schedule: sched, Input: *data})
 	renderStatus(w, r, status, h.pages["schedules_view.html"], scheduleViewData{
 		Schedule: sched, DayGroups: buildDayGroups(sched, data.Teachers), PinnedCount: pinnedCount(sched),
-		Breakdown: h.svc.Breakdown(sched, *data),
-		Quality:   h.svc.Quality(sched),
+		Breakdown: eval.Breakdown,
+		Quality:   eval.Quality,
 		Teachers:  data.Teachers, Rooms: data.Rooms, Buildings: data.Buildings, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
 		Error: errMsg, Success: successMsg,
 	})
@@ -458,7 +478,11 @@ func (h *Handler) schedulesDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := h.svc.DeleteSchedule(r.Context(), id); err != nil {
+	cmd, err := deleteschedule.NewCommand(id)
+	if err == nil {
+		err = h.uc.DeleteSchedule.Handle(r.Context(), cmd)
+	}
+	if err != nil {
 		h.loadSchedulesList(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -476,7 +500,7 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
-	sched, err := h.svc.GetSchedule(r.Context(), id)
+	sched, err := h.schedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)
@@ -501,11 +525,11 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 	})
 }
 
-func conflictMessage(c *app.ConflictError) string {
-	if c.Type == app.ConflictTeacherUnavailable {
+func conflictMessage(c *rules.ConflictError) string {
+	if c.Type == rules.ConflictTeacherUnavailable {
 		return "Конфликт: преподаватель отметил это время как недоступное"
 	}
-	if c.Type == app.ConflictTeacherExternalPair {
+	if c.Type == rules.ConflictTeacherExternalPair {
 		msg := "Конфликт: у преподавателя в это время пара на другом факультете"
 		if c.Detail != "" {
 			msg += ": " + c.Detail
@@ -526,8 +550,8 @@ func conflictMessage(c *app.ConflictError) string {
 	return fmt.Sprintf("Конфликт: %s (конфликтует с занятием №%d)", what, c.ConflictWith)
 }
 
-func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id int64, idx int, cmd app.MoveAssignmentCommand, status int, errMsg string) {
-	sched, err := h.svc.GetSchedule(r.Context(), id)
+func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id int64, idx int, cmd moveassignment.Command, status int, errMsg string) {
+	sched, err := h.schedule(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -571,17 +595,15 @@ func (h *Handler) schedulesPatchAssignment(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	cmd := app.MoveAssignmentCommand{
-		ScheduleID: id,
-		Index:      idx,
-		TimeSlot:   ts,
-		RoomID:     r.FormValue("room_id"),
-		Parity:     domain.Parity(r.FormValue("parity")),
+	cmd, err := moveassignment.NewCommand(id, idx, ts, r.FormValue("room_id"), domain.Parity(r.FormValue("parity")))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	_, err = h.svc.MoveAssignment(r.Context(), cmd)
+	_, err = h.uc.MoveAssignment.Handle(r.Context(), cmd)
 	if err != nil {
-		var conflict *app.ConflictError
+		var conflict *rules.ConflictError
 		switch {
 		case errors.As(err, &conflict):
 			h.reAssignmentForm(w, r, id, idx, cmd, http.StatusConflict, conflictMessage(conflict))
@@ -608,7 +630,11 @@ func parityLabel(p domain.Parity) string {
 
 // moveGrid — сетка вариантов переноса; при ошибке пустая (форма работает и без неё).
 func (h *Handler) moveGrid(r *http.Request, id int64, idx int, room string) []moveRow {
-	opts, err := h.svc.MoveOptions(r.Context(), id, idx)
+	q, err := moveoptions.NewQuery(id, idx)
+	if err != nil {
+		return nil
+	}
+	opts, err := h.uc.MoveOptions.Handle(r.Context(), q)
 	if err != nil {
 		return nil
 	}
@@ -631,7 +657,11 @@ func (h *Handler) schedulesPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pinned := r.FormValue("pinned") == "true"
-	if _, err := h.svc.PinAssignment(r.Context(), app.PinAssignmentCommand{ScheduleID: id, Index: idx, Pinned: pinned}); err != nil {
+	cmd, err := pinassignment.NewCommand(id, idx, pinned)
+	if err == nil {
+		_, err = h.uc.PinAssignment.Handle(r.Context(), cmd)
+	}
+	if err != nil {
 		h.loadScheduleView(w, r, id, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
@@ -653,7 +683,7 @@ func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
 	if !parseForm(w, r) {
 		return
 	}
-	base, err := h.svc.GetSchedule(r.Context(), id)
+	base, err := h.schedule(r.Context(), id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -661,7 +691,7 @@ func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
 	prefs := base.Options
 	construction := prefs.Construction
 	prefs.Construction = ""
-	sched, err := h.svc.GenerateSchedule(r.Context(), app.GenerateCommand{
+	cmd, err := generateschedule.NewCommand(generation.Request{
 		Name:           base.Name + " — перегенерация",
 		SolverType:     construction,
 		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 120),
@@ -669,6 +699,11 @@ func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
 		Preferences:    prefs,
 		BaseScheduleID: id,
 	})
+	if err != nil {
+		h.loadScheduleView(w, r, id, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+	sched, err := h.uc.GenerateSchedule.Handle(r.Context(), cmd)
 	if err != nil {
 		h.loadScheduleView(w, r, id, http.StatusUnprocessableEntity, "Не удалось перегенерировать: "+err.Error(), "")
 		return

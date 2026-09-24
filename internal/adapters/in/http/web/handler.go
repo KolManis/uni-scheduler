@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/KolManis/uni-scheduler/internal/core/app"
+	"github.com/KolManis/uni-scheduler/internal/core/application"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 	"github.com/gorilla/mux"
 )
@@ -42,34 +42,20 @@ type refWriter interface {
 	DeleteSubjectPlan(ctx context.Context, id string) (bool, error)
 }
 
-type scheduleService interface {
-	GenerateSchedule(ctx context.Context, cmd app.GenerateCommand) (*domain.Schedule, error)
-	GenerateAllMethods(ctx context.Context, cmd app.GenerateCommand) ([]*domain.Schedule, error)
-	GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error)
-	ListSchedules(ctx context.Context) ([]domain.ScheduleSummary, error)
-	Breakdown(sched *domain.Schedule, input domain.InputData) domain.FitnessBreakdown
-	Quality(sched *domain.Schedule) domain.WeekQuality
-	DeleteSchedule(ctx context.Context, id int64) error
-	MoveAssignment(ctx context.Context, cmd app.MoveAssignmentCommand) (*domain.Schedule, error)
-	PinAssignment(ctx context.Context, cmd app.PinAssignmentCommand) (*domain.Schedule, error)
-	CheckInput(ctx context.Context) ([]app.InputProblem, error)
-	MoveOptions(ctx context.Context, schedID int64, idx int) ([]app.MoveOption, error)
-}
-
 // Handler отдаёт серверно-рендеренный UI (Go html/template + лёгкий AJAX-хелпер вместо htmx)
 // поверх тех же репозиториев/сервиса, что использует JSON REST API.
 type Handler struct {
 	input inputLoader
 	ref   refWriter
-	svc   scheduleService
+	uc    application.UseCases
 	pages pageTemplates
 }
 
-func NewHandler(input inputLoader, ref refWriter, svc scheduleService) *Handler {
+func NewHandler(input inputLoader, ref refWriter, uc application.UseCases) *Handler {
 	return &Handler{
 		input: input,
 		ref:   ref,
-		svc:   svc,
+		uc:    uc,
 		pages: loadPages(
 			"buildings_list.html", "buildings_form.html",
 			"departments_list.html", "departments_form.html",
