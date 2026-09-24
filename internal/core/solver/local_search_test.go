@@ -7,9 +7,9 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
-func TestLocalSearch_ImprovesGapSchedule(t *testing.T) {
+func TestImprove_ImprovesGapSchedule(t *testing.T) {
 	// G1: пары 1 и 3 в понедельник → окно +10000
-	// после LocalSearch должен уменьшить или сохранить score
+	// после улучшения score должен уменьшиться или остаться прежним
 	assignments := []domain.Assignment{
 		{
 			GroupIDs: []string{"G1"}, TeacherID: "T1", RoomID: "R1",
@@ -26,11 +26,11 @@ func TestLocalSearch_ImprovesGapSchedule(t *testing.T) {
 	}
 
 	before := calculateFitness(assignments, domain.InputData{})
-	result := LocalSearch(assignments, domain.InputData{}, ImproveHillClimb, 0)
+	result := improve(ImproveHillClimb, converge(assignments, domain.InputData{}, time.Now().Add(time.Minute), nil), domain.InputData{}, time.Now().Add(time.Minute), nil)
 	after := calculateFitness(result, domain.InputData{})
 
 	if after > before {
-		t.Fatalf("LocalSearch made schedule worse: before=%d after=%d", before, after)
+		t.Fatalf("improve made schedule worse: before=%d after=%d", before, after)
 	}
 }
 
@@ -38,7 +38,7 @@ func TestLocalSearch_ImprovesGapSchedule(t *testing.T) {
 // он стартует от результата обычного converge (twoOpt+orOpt до сходимости) и оставляет
 // возмущённый вариант только если тот СТРОГО лучше — то есть итоговый score никогда не может
 // оказаться хуже, чем у чистого 2-opt/or-opt без итераций.
-func TestLocalSearch_NeverWorseThanPlainConverge(t *testing.T) {
+func TestImprove_NeverWorseThanPlainConverge(t *testing.T) {
 	assignments := []domain.Assignment{
 		{
 			GroupIDs: []string{"G1"}, TeacherID: "T1", RoomID: "R1",
@@ -68,17 +68,17 @@ func TestLocalSearch_NeverWorseThanPlainConverge(t *testing.T) {
 	input := domain.InputData{}
 
 	convergedOnly := converge(assignments, input, time.Now().Add(5*time.Second), nil)
-	full := LocalSearch(assignments, input, ImproveHillClimb, 0)
+	full := improve(ImproveHillClimb, convergedOnly, input, time.Now().Add(time.Minute), nil)
 
 	convergedScore := calculateFitness(convergedOnly, input)
 	fullScore := calculateFitness(full, input)
 
 	if fullScore > convergedScore {
-		t.Fatalf("LocalSearch (с iterated-возмущением) хуже чистого converge: full=%d converge=%d",
+		t.Fatalf("улучшение (iterated local search) хуже чистого converge: full=%d converge=%d",
 			fullScore, convergedScore)
 	}
 	if !checkHardConstraints(full, nil) {
-		t.Fatal("результат LocalSearch нарушает HC1-3")
+		t.Fatal("результат улучшения нарушает HC1-3")
 	}
 }
 
@@ -153,7 +153,7 @@ func TestCheckHardConstraints_RejectsTeacherUnavailableSlot(t *testing.T) {
 }
 
 // TestConverge_RespectsTeacherUnavailableSlots проверяет, что карта недоступных слотов
-// реально доходит до операторов (LocalSearch -> converge -> twoOpt/orOpt), а не теряется
+// реально доходит до операторов (solveOnce -> converge -> twoOptPass/orOptPass), а не теряется
 // по дороге.
 //
 // Слоты для блокировки подобраны не наугад: на этом входе converge детерминированно

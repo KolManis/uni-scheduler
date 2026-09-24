@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	// localSearchTotalBudget — потолок на всю работу LocalSearch (сходимость и метаэвристику).
+	// localSearchTotalBudget — бюджет по умолчанию на сходимость и улучшение (шаги 3–4 solveOnce).
 	// С инкрементальной оценкой (evaluator) сходимость на 362 парах занимает доли секунды,
 	// остальное время достаётся метаэвристике. Отжиг использует бюджет целиком, остальные
 	// методы останавливаются раньше по застою.
@@ -20,7 +20,7 @@ const (
 
 // teacherUnavailable — предвычисленная занятость преподавателей извне (HC7): слот → в
 // какие недели преподаватель занят. Недоступные слоты заняты всегда; пары на других
-// факультетах — в свою чётность. Строится один раз на запуск LocalSearch:
+// факультетах — в свою чётность. Строится один раз на запуск (solveOnce):
 // checkHardConstraints вызывается в горячем цикле, пересобирать карту на каждый вызов
 // было бы дорого. nil/пустая карта означает "ограничений нет".
 type teacherUnavailable map[string]map[domain.TimeSlot]domain.Parity
@@ -68,42 +68,23 @@ const (
 	ImproveLNS                ImproveAlgorithm = "lns"       // large neighborhood search: разрушение-восстановление
 )
 
-// LocalSearch улучшает расписание, уложившись в бюджете суммарно:
-//  0. insertUnplaced — попытка поставить пары, не поместившиеся при построении
-//     (повторяется и в конце: улучшение могло освободить место).
-//  1. converge — детерминированные 2-opt/or-opt по очереди до сходимости.
-//  2. Одна из мета-эвристик (algo) поверх сошедшегося результата: помогает
-//     выбраться из локального оптимума, куда converge не пускает.
-//
-// budget == 0 — используется дефолт localSearchTotalBudget (60 сек). Для параллельных
-// запусков (несколько горутин конкурируют за CPU) вызывающая сторона должна передавать
-// увеличенный бюджет, иначе deadline срабатывает на converge и метаэвристика не успевает
-// ни одной итерации сделать.
-//
-// Пустой algo эквивалентен ImproveHillClimb (значение по умолчанию, поведение как раньше).
-func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo ImproveAlgorithm, budget time.Duration) []domain.Assignment {
-	if budget <= 0 {
-		budget = localSearchTotalBudget
-	}
-	deadline := time.Now().Add(budget)
-	unavail := buildTeacherUnavailable(input)
-	current := insertUnplaced(assignments, input, unavail)
-	current = converge(current, input, deadline, unavail)
-
+// improve — улучшение выбранным методом (ADR-0012) поверх сошедшегося расписания:
+// каждый метод по-своему выбирается из локального оптимума, куда converge не пускает.
+// Пусто или неизвестное значение — iterated local search.
+func improve(algo ImproveAlgorithm, assignments []domain.Assignment, input domain.InputData,
+	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
 	switch algo {
 	case ImproveSimulatedAnnealing:
-		current = simulatedAnnealing(current, input, deadline, unavail)
+		return simulatedAnnealing(assignments, input, deadline, unavail)
 	case ImproveTabuSearch:
-		current = tabuSearch(current, input, deadline, unavail)
+		return tabuSearch(assignments, input, deadline, unavail)
 	case ImproveGeneticAlgorithm:
-		current = geneticAlgorithm(current, input, deadline, unavail)
+		return geneticAlgorithm(assignments, input, deadline, unavail)
 	case ImproveLNS:
-		current = largeNeighborhoodSearch(current, input, deadline, unavail)
-	default: // ImproveHillClimb или пусто
-		current = iteratedLocalSearch(current, input, deadline, unavail)
+		return largeNeighborhoodSearch(assignments, input, deadline, unavail)
+	default:
+		return iteratedLocalSearch(assignments, input, deadline, unavail)
 	}
-	// Улучшение могло освободить место: ещё одна попытка поставить оставшиеся пары.
-	return insertUnplaced(current, input, unavail)
 }
 
 // converge доводит расписание до локального оптимума (см. convergeEval).

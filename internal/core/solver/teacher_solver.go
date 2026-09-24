@@ -112,47 +112,56 @@ func Solve(input domain.InputData, opt Options) (*domain.Schedule, error) {
 	return solveOnce(input, opt)
 }
 
-// solveOnce — один запуск: построение выбранным алгоритмом и улучшение.
+// solveOnce — один запуск. Весь путь от входных данных до расписания — здесь, по шагам.
 func solveOnce(input domain.InputData, opt Options) (*domain.Schedule, error) {
-	input = normalizeInput(input)
-	state := newTeacherState(input)
+	input = normalizeInput(input) // порядок справочников не должен влиять на результат (ADR-0008)
+	unavail := buildTeacherUnavailable(input)
+	budget := opt.Budget
+	if budget <= 0 {
+		budget = localSearchTotalBudget
+	}
+	deadline := time.Now().Add(budget)
+
+	// 1. Построение: пары ставятся по одной, каждая — в лучший на этот момент слот.
+	pairs := construct(input, opt)
+	// 2. Пары, не поместившиеся при построении, — ещё попытка, с вытеснением соседей.
+	pairs = insertUnplaced(pairs, input, unavail)
+	// 3. Сходимость: простые перестановки, пока расписание улучшается.
+	pairs = converge(pairs, input, deadline, unavail)
+	// 4. Улучшение выбранным методом — выход из локального оптимума.
+	pairs = improve(opt.Improve, pairs, input, deadline, unavail)
+	// 5. Улучшение могло освободить место — последняя попытка поставить оставшиеся пары.
+	pairs = insertUnplaced(pairs, input, unavail)
+
+	score := calculateFitness(pairs, input)
+	slog.Default().Info("solve complete",
+		"construction", opt.Construction, "improve", opt.Improve,
+		"assignments", len(pairs), "score", score)
+	return &domain.Schedule{Assignments: pairs, Score: score}, nil
+}
+
+// construct — начальное расписание выбранным алгоритмом, вокруг закреплённых пар.
+// Непоставленные пары не ошибка: они попадут в отчёт «Не размещено».
+func construct(input domain.InputData, opt Options) []domain.Assignment {
+	draft := newTeacherState(input)
 	for _, a := range opt.Fixed {
-		placeFixed(state, a)
+		placeFixed(draft, a)
 	}
 
-	var rng *rand.Rand
+	var rng *rand.Rand // nil — без перемешивания, построение детерминированное
 	if opt.Seed != 0 {
 		rng = rand.New(rand.NewSource(opt.Seed))
 	}
-
 	if opt.Construction == ConstructDSatur {
-		constructDSatur(state, rng)
+		constructDSatur(draft, rng)
 	} else {
-		constructByTeacher(state, rng)
+		constructByTeacher(draft, rng)
 	}
 
-	// Если что-то не поместилось, результат всё равно доводится до конца: непоставленные
-	// пары попадают в отчёт unplaced (ComputeUnplaced). Раньше здесь весь результат
-	// выбрасывался и запускался старый поиск с возвратом, дававший расписание в десятки
-	// раз хуже (score ~918000 против ~13000 на тех же данных).
-	if !allSubjectsPlacedTeacher(state) {
-		state.logger.Warn("not all subjects placed, continuing; see unplaced report")
+	if !allSubjectsPlacedTeacher(draft) {
+		draft.logger.Warn("not all subjects placed, continuing; see unplaced report")
 	}
-
-	improved := LocalSearch(state.assignments, state.input, opt.Improve, opt.Budget)
-	score := calculateFitness(improved, state.input)
-
-	state.logger.Info("solve complete",
-		"construction", opt.Construction,
-		"assignments", len(improved),
-		"score", score,
-		"improve", opt.Improve,
-	)
-
-	return &domain.Schedule{
-		Assignments: improved,
-		Score:       score,
-	}, nil
+	return draft.assignments
 }
 
 // placeFixed ставит закреплённую пару как есть.
