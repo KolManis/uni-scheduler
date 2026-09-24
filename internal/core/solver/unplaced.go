@@ -4,7 +4,7 @@ import "github.com/KolManis/uni-scheduler/internal/core/domain"
 
 // ComputeUnplaced сравнивает итоговые assignments с планом (input.SubjectPlans) и возвращает
 // те часы, которые ни один из солверов не смог поставить в расписание. Считается по факту
-// из готового результата, поэтому работает одинаково для teacher-driven и backtracking-солвера.
+// из готового результата, поэтому не зависит от алгоритма построения и улучшения.
 func ComputeUnplaced(assignments []domain.Assignment, input domain.InputData) []domain.UnplacedItem {
 	placed := make(map[string]map[domain.ClassType]int)
 	for _, a := range assignments {

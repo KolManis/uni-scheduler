@@ -131,11 +131,11 @@ func twoOptPass(e *evaluator, deadline time.Time) {
 	cur := e.score()
 	for improved := true; improved; {
 		improved = false
-		for i := range e.asg {
+		for i := range e.pairs {
 			if time.Now().After(deadline) {
 				return
 			}
-			for j := i + 1; j < len(e.asg); j++ {
+			for j := i + 1; j < len(e.pairs); j++ {
 				if e.slot[i] == e.slot[j] || e.slot[i] == unplacedSlot || e.slot[j] == unplacedSlot {
 					continue
 				}
@@ -157,7 +157,7 @@ func orOptPass(e *evaluator, deadline time.Time) {
 	cur := e.score()
 	for improved := true; improved; {
 		improved = false
-		for i := range e.asg {
+		for i := range e.pairs {
 			if time.Now().After(deadline) {
 				return
 			}
@@ -181,14 +181,14 @@ func orOptPass(e *evaluator, deadline time.Time) {
 // roomPass — пара остаётся в своём слоте, но переходит в другую допустимую аудиторию.
 func roomPass(e *evaluator, deadline time.Time) {
 	cur := e.score()
-	for i := range e.asg {
+	for i := range e.pairs {
 		if time.Now().After(deadline) {
 			return
 		}
 		if e.slot[i] == unplacedSlot {
 			continue
 		}
-		for _, r := range e.info[i].cands {
+		for _, r := range e.info[i].roomOptions {
 			if r == e.info[i].room {
 				continue
 			}
@@ -245,7 +245,7 @@ func groupDayPass(e *evaluator, deadline time.Time) {
 // randomMove — случайный допустимый ход: обмен, перенос, смена аудитории или обмен
 // днями группы. Возвращает откат; ok == false, если за 20 попыток ничего не нашлось.
 func randomMove(e *evaluator, rng *rand.Rand) ([]move, bool) {
-	n := len(e.asg)
+	n := len(e.pairs)
 	if n < 2 {
 		return nil, false
 	}
@@ -270,7 +270,7 @@ func randomMove(e *evaluator, rng *rand.Rand) ([]move, bool) {
 			}
 			undo, ok = e.relocate(i, s)
 		case r < 18:
-			cands := e.info[i].cands
+			cands := e.info[i].roomOptions
 			if len(cands) < 2 {
 				continue
 			}
@@ -303,8 +303,8 @@ func randomMove(e *evaluator, rng *rand.Rand) ([]move, bool) {
 
 // snapshot — слоты и аудитории всех пар; restore возвращает расписание к снимку.
 func (e *evaluator) snapshot() []move {
-	s := make([]move, len(e.asg))
-	for i := range e.asg {
+	s := make([]move, len(e.pairs))
+	for i := range e.pairs {
 		s[i] = move{i, e.slot[i], e.info[i].room}
 	}
 	return s

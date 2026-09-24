@@ -36,7 +36,7 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	e := newEvaluator(assignments, input, unavail)
-	if len(e.asg) < 2 {
+	if len(e.pairs) < 2 {
 		return e.assignments()
 	}
 	best := e.snapshot()
@@ -79,8 +79,8 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 // chooseRuin — какие пары снять на этой итерации.
 func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 	movable := 0
-	for i := range e.asg {
-		if !e.asg[i].Pinned {
+	for i := range e.pairs {
+		if !e.pairs[i].Pinned {
 			movable++
 		}
 	}
@@ -88,7 +88,7 @@ func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 		return nil
 	}
 	frac := lnsDestroyMin + rng.Float64()*(lnsDestroyMax-lnsDestroyMin)
-	ruin := newRuinSet(min(movable, max(1, int(float64(len(e.asg))*frac))))
+	ruin := newRuinSet(min(movable, max(1, int(float64(len(e.pairs))*frac))))
 
 	switch rng.Intn(3) {
 	case 0:
@@ -97,7 +97,7 @@ func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 		addWholeTeachers(e, rng, ruin)
 	}
 	for !ruin.full() {
-		ruin.add(e, rng.Intn(len(e.asg)))
+		ruin.add(e, rng.Intn(len(e.pairs)))
 	}
 	return ruin.pairs
 }
@@ -117,7 +117,7 @@ func (r *ruinSet) full() bool { return len(r.pairs) >= r.limit }
 
 // add добавляет пару i, если она ещё не выбрана, не закреплена и место есть.
 func (r *ruinSet) add(e *evaluator, i int) {
-	if !r.picked[i] && !e.asg[i].Pinned && !r.full() {
+	if !r.picked[i] && !e.pairs[i].Pinned && !r.full() {
 		r.picked[i] = true
 		r.pairs = append(r.pairs, i)
 	}

@@ -30,7 +30,7 @@ func tabuSearch(assignments []domain.Assignment, input domain.InputData,
 	best := e.snapshot()
 	bestScore := e.score()
 
-	tabuUntil := make([]int, len(e.asg)*numSlots) // [пара*36+слот] — до какой итерации пара не может вернуться в слот
+	tabuUntil := make([]int, len(e.pairs)*numSlots) // [пара*36+слот] — до какой итерации пара не может вернуться в слот
 
 	noImprove := 0
 	for iter := 1; noImprove < tabuMaxNoImprove && !time.Now().After(deadline); iter++ {

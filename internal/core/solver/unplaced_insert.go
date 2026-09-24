@@ -35,8 +35,8 @@ func insertUnplaced(assignments []domain.Assignment, input domain.InputData,
 	e := newEvaluatorWithPending(assignments, pending, input, unavail)
 
 	var todo []int
-	for i := len(assignments); i < len(e.asg); i++ {
-		if len(e.info[i].cands) > 0 {
+	for i := len(assignments); i < len(e.pairs); i++ {
+		if len(e.info[i].roomOptions) > 0 {
 			todo = append(todo, i)
 		}
 	}
@@ -92,7 +92,7 @@ func insertWithEjection(e *evaluator, i int) bool {
 	bestScore := 0
 
 	for s := 0; s < numSlots; s++ {
-		if busy := e.unavail[e.info[i].teacher][s]; (busy[0] && e.info[i].weeks[0]) || (busy[1] && e.info[i].weeks[1]) {
+		if busy := e.teacherBusy[e.info[i].teacher][s]; (busy[0] && e.info[i].weeks[0]) || (busy[1] && e.info[i].weeks[1]) {
 			continue
 		}
 		blockers := blockersAt(e, i, s)
@@ -153,7 +153,7 @@ func blockersAt(e *evaluator, i, s int) []int {
 // canEject — пару j можно снять, чтобы поставить пару i: она не закреплена, идёт с i в
 // общую неделю и делит с ней преподавателя или группу.
 func canEject(e *evaluator, i, j int) bool {
-	if e.asg[j].Pinned {
+	if e.pairs[j].Pinned {
 		return false
 	}
 	a, b := &e.info[i], &e.info[j]

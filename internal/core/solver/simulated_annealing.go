@@ -31,7 +31,7 @@ func simulatedAnnealing(assignments []domain.Assignment, input domain.InputData,
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	e := newEvaluator(assignments, input, unavail)
-	if len(e.asg) < 2 {
+	if len(e.pairs) < 2 {
 		return e.assignments()
 	}
 	current := e.score()
@@ -44,7 +44,7 @@ func simulatedAnnealing(assignments []domain.Assignment, input domain.InputData,
 	if total <= 0 {
 		return e.assignments()
 	}
-	restartAfter := 50 * len(e.asg)
+	restartAfter := 50 * len(e.pairs)
 
 	T := t0
 	noImprove := 0

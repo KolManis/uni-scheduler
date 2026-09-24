@@ -4,6 +4,10 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
+// Жёсткие ограничения при построении: можно ли поставить пару в слот и аудиторию.
+
+// isSlotFree — ресурс resourceID (группа, преподаватель, аудитория) свободен в slot в
+// недели parity. Занят «по чётным» и ставим «по нечётным» — свободен: пары не пересекаются.
 func isSlotFree(
 	slot domain.TimeSlot,
 	resourceID string,
@@ -23,6 +27,7 @@ func isSlotFree(
 	return true
 }
 
+// isSlotFreeForAllGroups — isSlotFree для каждой группы пары.
 func isSlotFreeForAllGroups(
 	slot domain.TimeSlot,
 	groupIDs []string,
@@ -37,6 +42,7 @@ func isSlotFreeForAllGroups(
 	return true
 }
 
+// isTeacherAvailable — слот не отмечен у преподавателя как недоступный.
 func isTeacherAvailable(slot domain.TimeSlot, teacher domain.Teacher) bool {
 	for _, unavailable := range teacher.UnavailableSlots {
 		if unavailable.Day() == slot.Day() && unavailable.PairNum() == slot.PairNum() {
@@ -46,6 +52,7 @@ func isTeacherAvailable(slot domain.TimeSlot, teacher domain.Teacher) bool {
 	return true
 }
 
+// isRoomSuitable — тип аудитории подходит под требование плана (HC4).
 func isRoomSuitable(room domain.Room, requiredType string) bool {
 	if requiredType == "" {
 		return true

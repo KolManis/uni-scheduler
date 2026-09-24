@@ -240,9 +240,9 @@ func TestCalcGaps(t *testing.T) {
 		{[]int{1, 2, 4}, 1},
 	}
 	for _, c := range cases {
-		got := calcGaps(c.pairs)
+		got := gapsBetween(c.pairs)
 		if got != c.want {
-			t.Errorf("calcGaps(%v) = %d, want %d", c.pairs, got, c.want)
+			t.Errorf("gapsBetween(%v) = %d, want %d", c.pairs, got, c.want)
 		}
 	}
 }
