@@ -17,7 +17,7 @@ var ErrInvalidInput = errors.New("invalid input")
 type GenerateInput struct {
 	Name          string
 	MaxIterations int
-	SolverType    string              // "" или "teacher"; другие значения — ошибка (старый "subject" удалён)
+	SolverType    string              // алгоритм построения: "" / "teacher" (по преподавателям) | "dsatur"
 	TimeoutSec    int                 // 0 → используется дефолт 30 сек
 	SemesterHalf  domain.SemesterHalf // "" | "full" | "first" | "second"
 	// "first"  → все планы (1-я половина семестра, лекции ещё идут)
@@ -70,6 +70,7 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 	if err := validateSolverType(in.SolverType); err != nil {
 		return nil, err
 	}
+	construct, _ := solver.ParseConstruction(in.SolverType)
 	if in.Name == "" {
 		in.Name = "Untitled"
 	}
@@ -125,17 +126,14 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (*domain.Sched
 		var solveErr error
 
 		improve := solver.ImproveAlgorithm(in.ImproveAlgo)
-		if in.ParallelStarts <= 1 {
-			result, solveErr = solver.SolveTeacherWithBudget(dataForSolver, in.MaxIterations, improve, 0, solverBudget)
-		} else {
-			result, solveErr = solver.SolveTeacherMultiStart(dataForSolver, in.MaxIterations, improve, in.ParallelStarts, solverBudget)
-		}
+		result, solveErr = solver.SolveMultiStart(dataForSolver, construct, in.MaxIterations, improve, in.ParallelStarts, solverBudget)
 		if solveErr != nil {
 			ch <- solveResult{err: solveErr}
 			return
 		}
 		result.Name = in.Name
 		result.Options = in.Preferences
+		result.Options.Construction = string(construct)
 		result.Unplaced = solver.ComputeUnplaced(result.Assignments, dataForSolver)
 		saved, err := s.outputRepo.SaveSchedule(context.Background(), result)
 		if err != nil {
@@ -171,6 +169,7 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	if err := validateSolverType(in.SolverType); err != nil {
 		return nil, err
 	}
+	construct, _ := solver.ParseConstruction(in.SolverType)
 	if in.Name == "" {
 		in.Name = "Untitled"
 	}
@@ -235,16 +234,21 @@ func (s *Service) GenerateAllMethods(ctx context.Context, in GenerateInput) ([]*
 	data.Preferences = in.Preferences
 	dataForSolver := *data
 	baseName := in.Name
+	constructLabel := ""
+	if construct == solver.ConstructDSatur {
+		constructLabel = "DSatur, "
+	}
 	for i, m := range methods {
 		go func(idx int, algo solver.ImproveAlgorithm, suffix string) {
-			sched, solveErr := solver.SolveTeacherWithBudget(dataForSolver, in.MaxIterations, algo, 0, solverBudget)
+			sched, solveErr := solver.SolveWithBudget(dataForSolver, construct, in.MaxIterations, algo, 0, solverBudget)
 			if solveErr != nil {
 				results[idx] = genResult{err: solveErr}
 				done <- idx
 				return
 			}
-			sched.Name = baseName + " — " + suffix
+			sched.Name = baseName + " — " + constructLabel + suffix
 			sched.Options = in.Preferences
+			sched.Options.Construction = string(construct)
 			sched.Unplaced = solver.ComputeUnplaced(sched.Assignments, dataForSolver)
 			out, err := s.outputRepo.SaveSchedule(context.Background(), sched)
 			if err != nil {
@@ -437,10 +441,10 @@ func slotsConflict(a, b domain.Assignment) bool {
 // validateSolverType — остался один солвер (teacher-driven). Старый поиск с возвратом
 // ("subject") удалён: на реальных данных он давал score ~918000 против ~13000.
 func validateSolverType(solverType string) error {
-	if solverType == "" || solverType == "teacher" {
+	if _, ok := solver.ParseConstruction(solverType); ok {
 		return nil
 	}
-	return fmt.Errorf("%w: solver_type %q не поддерживается, доступен только \"teacher\"", ErrInvalidInput, solverType)
+	return fmt.Errorf("%w: solver_type %q не поддерживается, доступны \"teacher\" и \"dsatur\"", ErrInvalidInput, solverType)
 }
 
 // isTeacherUnavailable — слот входит в недоступные слоты преподавателя.

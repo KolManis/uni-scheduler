@@ -10,6 +10,7 @@
 {
   "name": "Осень 2026",
   "timeout_sec": 120,
+  "solver_type": "dsatur",
   "improve_algo": "hillclimb",
   "parallel_starts": 1,
   "semester_half": "",
@@ -25,7 +26,7 @@
 | `improve_algo` | `hillclimb` | `hillclimb`, `sa`, `tabu`, `ga`, `lns` |
 | `parallel_starts` | 1 | N > 1 — многостарт, берётся лучший |
 | `semester_half` | `""` | `second` исключает планы только первой половины |
-| `solver_type` | `""` | только `""` или `teacher`; иначе 400 |
+| `solver_type` | `""` | построение: `""` или `teacher` — по преподавателям, `dsatur` — самая трудная пара первой (ADR-0015); иначе 400 |
 
 Ответы: **201** — расписание целиком; **400** — неверные параметры; **500** — ошибка генерации
 или таймаут.

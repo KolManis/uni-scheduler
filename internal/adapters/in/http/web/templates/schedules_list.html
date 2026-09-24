@@ -29,6 +29,14 @@
     </div>
     <div class="form-row">
       <div class="field">
+        <label>Построение</label>
+        <select name="solver_type">
+          <option value="teacher">По преподавателям</option>
+          <option value="dsatur">Самая трудная пара первой (DSatur)</option>
+        </select>
+        <div class="hint">Как расставляется начальное расписание до улучшения. См. «Справка».</div>
+      </div>
+      <div class="field">
         <label>Метод улучшения</label>
         <select name="improve_algo">
           <option value="all">Все методы — сравнить (рекомендуется)</option>

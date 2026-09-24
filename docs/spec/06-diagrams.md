@@ -70,13 +70,13 @@ sequenceDiagram
   participant SL as solver
   participant OR as OutputRepository
 
-  C->>H: POST generate {name, timeout_sec, improve_algo, правила}
+  C->>H: POST generate {name, timeout_sec, solver_type, improve_algo, правила}
   H->>S: Generate(input)
   S->>S: проверить solver_type
   S->>IR: LoadInput()
   IR-->>S: справочники и планы
-  S->>SL: SolveTeacherWithBudget(данные + правила, бюджет = таймаут − 15 с)
-  Note over SL: нормализация порядка → построение →<br/>сходимость → метаэвристика
+  S->>SL: SolveMultiStart(данные + правила, построение, бюджет = таймаут − 15 с)
+  Note over SL: нормализация порядка → построение →<br/>вставка непоставленных → сходимость → метаэвристика
   SL-->>S: пары, score
   S->>SL: ComputeUnplaced(пары, данные)
   S->>OR: SaveSchedule(пары, score, unplaced, options)

@@ -7,7 +7,7 @@
 {{$groups := .Groups}}
 {{$subjectPlans := .SubjectPlans}}
 <div class="toolbar">
-  <h1>{{.Schedule.Name}} <span class="muted">(score={{.Schedule.Score}}, занятий={{len .Schedule.Assignments}})</span></h1>
+  <h1>{{.Schedule.Name}} <span class="muted">(score={{.Schedule.Score}}, занятий={{len .Schedule.Assignments}}{{if eq .Schedule.Options.Construction "dsatur"}}, построение: DSatur{{else if eq .Schedule.Options.Construction "teacher"}}, построение: по преподавателям{{end}})</span></h1>
   <div class="actions">
     <a class="btn secondary" hx-get="/ui/schedules" hx-target="#main" href="/ui/schedules">← к списку</a>
     <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/groups" hx-target="#main" href="/ui/schedules/{{$id}}/groups">По группам</a>
@@ -56,7 +56,8 @@
 
 {{if .Schedule.Unplaced}}
 <div class="banner error">
-  Не удалось разместить {{len .Schedule.Unplaced}} занятие(й) — не хватило свободных слотов/аудиторий с учётом ограничений.
+  Не удалось разместить {{len .Schedule.Unplaced}} занятие(й) — не хватило свободных слотов/аудиторий с учётом ограничений,
+  в том числе после попытки освободить место перестановкой до трёх соседних пар.
   Возможные причины: недостаточно аудиторий нужного типа (`requires_room_type`), маленькая вместимость для потока,
   преподаватель перегружен (`max_weekly_hours`) или слишком много `unavailable_slots`.
 </div>

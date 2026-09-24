@@ -89,12 +89,22 @@ func slotFromIndex(i int) domain.TimeSlot {
 }
 
 func newEvaluator(assignments []domain.Assignment, input domain.InputData, unavail teacherUnavailable) *evaluator {
+	return newEvaluatorWithPending(assignments, nil, input, unavail)
+}
+
+// newEvaluatorWithPending — как newEvaluator, но дополнительно держит пары pending
+// снятыми: у них нет слота, и их можно поставить через apply/relocate. Аудитория
+// снятой пары — лучшая из допустимых (если допустимых нет, поставить её нельзя).
+func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.InputData,
+	unavail teacherUnavailable) *evaluator {
+	assignments := append(cloneAssignments(placed), pending...)
 	e := &evaluator{
 		input: input,
-		asg:   cloneAssignments(assignments),
+		asg:   assignments,
 		info:  make([]asgInfo, len(assignments)),
 		slot:  make([]int, len(assignments)),
 	}
+	isPending := func(i int) bool { return i >= len(placed) }
 
 	teacherIdx := map[string]int{}
 	groupIdx := map[string]int{}
@@ -134,6 +144,9 @@ func newEvaluator(assignments []domain.Assignment, input domain.InputData, unava
 		inf.room = idx(roomIdx, a.RoomID)
 		inf.weeks = [2]bool{inWeek(a.Parity, domain.Even), inWeek(a.Parity, domain.Odd)}
 		e.slot[i] = slotIndex(a.TimeSlot)
+		if isPending(i) {
+			e.slot[i] = unplacedSlot
+		}
 	}
 
 	// Аудитории: сначала известные из справочника, затем встреченные только в парах.
@@ -189,6 +202,11 @@ func newEvaluator(assignments []domain.Assignment, input domain.InputData, unava
 		for _, c := range cands {
 			e.info[i].cands = append(e.info[i].cands, c.room)
 		}
+		if isPending(i) && len(cands) > 0 {
+			e.info[i].room = cands[0].room
+			e.asg[i].RoomID = e.roomIDs[cands[0].room]
+			e.asg[i].BuildingID = e.rooms[cands[0].room].building
+		}
 	}
 
 	e.unavail = make([][numSlots]bool, len(teacherIdx))
@@ -217,7 +235,7 @@ func newEvaluator(assignments []domain.Assignment, input domain.InputData, unava
 			e.groups[g].members = append(e.groups[g].members, i)
 		}
 		e.occupy(i, e.slot[i], inf.room, 1)
-		if e.slot[i]/6 == saturdayIdx {
+		if e.slot[i] != unplacedSlot && e.slot[i]/6 == saturdayIdx {
 			e.addSaturday(i, 1)
 		}
 	}

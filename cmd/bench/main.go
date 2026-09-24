@@ -3,6 +3,7 @@
 //
 //	go run ./cmd/bench -runs 5 -budget 60s -methods hillclimb,sa,lns > bench.csv
 //	go run ./cmd/bench -snapshots data/snapshots -runs 3 -budget 30s   # без БД
+//	go run ./cmd/bench -snapshots data/snapshots -construct teacher,dsatur -budget 1ns   # только построение
 package main
 
 import (
@@ -28,6 +29,7 @@ func main() {
 		runs    = flag.Int("runs", 5, "прогонов на метод")
 		budget  = flag.Duration("budget", 60*time.Second, "бюджет локального поиска на прогон")
 		methods = flag.String("methods", "hillclimb,sa,tabu,ga,lns", "методы через запятую")
+		builds  = flag.String("construct", "teacher", "алгоритмы построения через запятую: teacher, dsatur")
 		snaps   = flag.String("snapshots", "", "каталог JSON-снимков справочников вместо БД (например, data/snapshots)")
 	)
 	flag.Parse()
@@ -44,30 +46,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("method,run,score,gaps_even,gaps_odd,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds")
-	for _, method := range strings.Split(*methods, ",") {
-		algo := solver.ImproveAlgorithm(strings.TrimSpace(method))
-		scores := make([]int, 0, *runs)
-		for run := 1; run <= *runs; run++ {
-			start := time.Now()
-			sched, err := solver.SolveTeacherWithBudget(*data, 50000, algo, 0, *budget)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s прогон %d: %v\n", algo, run, err)
-				continue
-			}
-			q := solver.CalculateQuality(sched.Assignments)
-			unplaced := len(solver.ComputeUnplaced(sched.Assignments, *data))
-			fmt.Printf("%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f\n", algo, run, sched.Score,
-				q.Even.GroupGaps, q.Odd.GroupGaps, q.Even.SingleClassDays, q.Odd.SingleClassDays,
-				q.Even.SaturdayPairs+q.Odd.SaturdayPairs,
-				max(q.Even.MaxGroupPairsPerDay, q.Odd.MaxGroupPairsPerDay),
-				unplaced, time.Since(start).Seconds())
-			scores = append(scores, sched.Score)
+	fmt.Println("construct,method,run,score,gaps_even,gaps_odd,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds")
+	for _, b := range strings.Split(*builds, ",") {
+		construct, ok := solver.ParseConstruction(strings.TrimSpace(b))
+		if !ok {
+			fmt.Fprintln(os.Stderr, "неизвестный алгоритм построения:", b)
+			os.Exit(1)
 		}
-		if len(scores) > 0 {
-			sort.Ints(scores)
-			fmt.Fprintf(os.Stderr, "%s: медиана %d, мин %d, макс %d (%d прогонов)\n",
-				algo, scores[len(scores)/2], scores[0], scores[len(scores)-1], len(scores))
+		for _, method := range strings.Split(*methods, ",") {
+			algo := solver.ImproveAlgorithm(strings.TrimSpace(method))
+			scores := make([]int, 0, *runs)
+			for run := 1; run <= *runs; run++ {
+				start := time.Now()
+				sched, err := solver.SolveWithBudget(*data, construct, 50000, algo, 0, *budget)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "%s/%s прогон %d: %v\n", construct, algo, run, err)
+					continue
+				}
+				q := solver.CalculateQuality(sched.Assignments)
+				unplaced := len(solver.ComputeUnplaced(sched.Assignments, *data))
+				fmt.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f\n", construct, algo, run, sched.Score,
+					q.Even.GroupGaps, q.Odd.GroupGaps, q.Even.SingleClassDays, q.Odd.SingleClassDays,
+					q.Even.SaturdayPairs+q.Odd.SaturdayPairs,
+					max(q.Even.MaxGroupPairsPerDay, q.Odd.MaxGroupPairsPerDay),
+					unplaced, time.Since(start).Seconds())
+				scores = append(scores, sched.Score)
+			}
+			if len(scores) > 0 {
+				sort.Ints(scores)
+				fmt.Fprintf(os.Stderr, "%s/%s: медиана %d, мин %d, макс %d (%d прогонов)\n",
+					construct, algo, scores[len(scores)/2], scores[0], scores[len(scores)-1], len(scores))
+			}
 		}
 	}
 }

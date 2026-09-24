@@ -55,7 +55,9 @@ const (
 	ImproveLNS                ImproveAlgorithm = "lns"       // large neighborhood search: разрушение-восстановление
 )
 
-// LocalSearch улучшает расписание в два этапа, уложившись в бюджете суммарно:
+// LocalSearch улучшает расписание, уложившись в бюджете суммарно:
+//  0. insertUnplaced — попытка поставить пары, не поместившиеся при построении
+//     (повторяется и в конце: улучшение могло освободить место).
 //  1. converge — детерминированные 2-opt/or-opt по очереди до сходимости.
 //  2. Одна из мета-эвристик (algo) поверх сошедшегося результата: помогает
 //     выбраться из локального оптимума, куда converge не пускает.
@@ -72,7 +74,8 @@ func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo I
 	}
 	deadline := time.Now().Add(budget)
 	unavail := buildTeacherUnavailable(input)
-	current := converge(assignments, input, deadline, unavail)
+	current := insertUnplaced(assignments, input, unavail)
+	current = converge(current, input, deadline, unavail)
 
 	switch algo {
 	case ImproveSimulatedAnnealing:
@@ -86,7 +89,8 @@ func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo I
 	default: // ImproveHillClimb или пусто
 		current = iteratedLocalSearch(current, input, deadline, unavail)
 	}
-	return current
+	// Улучшение могло освободить место: ещё одна попытка поставить оставшиеся пары.
+	return insertUnplaced(current, input, unavail)
 }
 
 // converge доводит расписание до локального оптимума (см. convergeEval).

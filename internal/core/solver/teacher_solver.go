@@ -85,6 +85,32 @@ func SolveTeacherWithSeed(input domain.InputData, maxIter int, improve ImproveAl
 // seed == 0 — детерминированное построение. Ненулевой seed перемешивает преподавателей
 // и предметы в пределах одной и той же приоритетной группы.
 func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64, budget time.Duration) (*domain.Schedule, error) {
+	return SolveWithBudget(input, ConstructTeacher, maxIter, improve, seed, budget)
+}
+
+// Construction — алгоритм построения начального расписания.
+type Construction string
+
+const (
+	ConstructTeacher Construction = "teacher" // по преподавателям, от самых ограниченных (по умолчанию)
+	ConstructDSatur  Construction = "dsatur"  // самая трудная пара первой (DSatur, раскраска графа)
+)
+
+// ParseConstruction — алгоритм построения по значению solver_type. Пустое — по умолчанию.
+func ParseConstruction(s string) (Construction, bool) {
+	switch Construction(s) {
+	case "", ConstructTeacher:
+		return ConstructTeacher, true
+	case ConstructDSatur:
+		return ConstructDSatur, true
+	}
+	return "", false
+}
+
+// SolveWithBudget — построение выбранным алгоритмом и улучшение (LocalSearch).
+// Параметры seed и budget — как у SolveTeacherWithBudget.
+func SolveWithBudget(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
+	seed int64, budget time.Duration) (*domain.Schedule, error) {
 	input = normalizeInput(input)
 	state := newTeacherState(input)
 
@@ -93,22 +119,10 @@ func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve Improve
 		rng = rand.New(rand.NewSource(seed))
 	}
 
-	teachers := orderTeachersByFlexibility(state)
-	if rng != nil {
-		shuffleWithinBuckets(teachers, rng, func(t domain.Teacher) float64 {
-			return teacherFlexibility(state, t)
-		})
-	}
-
-	for _, t := range teachers {
-		state.logger.Info("processing teacher", "id", t.ID, "name", t.Name, "max_hours", t.MaxWeeklyHours)
-		tasks := collectRemaining(state, input, t)
-		if rng != nil {
-			shuffleTasksWithinPriority(tasks, rng)
-		}
-		for _, task := range tasks {
-			placeTask(state, task)
-		}
+	if construct == ConstructDSatur {
+		constructDSatur(state, rng)
+	} else {
+		constructByTeacher(state, rng)
 	}
 
 	// Если что-то не поместилось, результат всё равно доводится до конца: непоставленные
@@ -122,7 +136,8 @@ func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve Improve
 	improved := LocalSearch(state.assignments, state.input, improve, budget)
 	score := calculateFitness(improved, state.input)
 
-	state.logger.Info("teacher-driven solve complete",
+	state.logger.Info("solve complete",
+		"construction", construct,
 		"assignments", len(improved),
 		"score", score,
 		"improve", improve,
@@ -132,6 +147,28 @@ func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve Improve
 		Assignments: improved,
 		Score:       score,
 	}, nil
+}
+
+// constructByTeacher — построение по преподавателям: от самых ограниченных к самым
+// гибким, пары преподавателя ставятся подряд.
+func constructByTeacher(state *teacherState, rng *rand.Rand) {
+	teachers := orderTeachersByFlexibility(state)
+	if rng != nil {
+		shuffleWithinBuckets(teachers, rng, func(t domain.Teacher) float64 {
+			return teacherFlexibility(state, t)
+		})
+	}
+
+	for _, t := range teachers {
+		state.logger.Info("processing teacher", "id", t.ID, "name", t.Name, "max_hours", t.MaxWeeklyHours)
+		tasks := collectRemaining(state, state.input, t)
+		if rng != nil {
+			shuffleTasksWithinPriority(tasks, rng)
+		}
+		for _, task := range tasks {
+			placeTask(state, task)
+		}
+	}
 }
 
 // placeGroupsSplit ставит занятие сразу для всех groupIDs одной парой. Если общего окна на весь

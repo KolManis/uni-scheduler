@@ -17,8 +17,13 @@ import (
 //
 // starts == 0 или 1 — один запуск, как обычный SolveTeacher.
 func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve ImproveAlgorithm, starts int, budget time.Duration) (*domain.Schedule, error) {
+	return SolveMultiStart(input, ConstructTeacher, maxIter, improve, starts, budget)
+}
+
+// SolveMultiStart — многостартовый поиск с выбранным алгоритмом построения.
+func SolveMultiStart(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm, starts int, budget time.Duration) (*domain.Schedule, error) {
 	if starts <= 1 {
-		return SolveTeacherWithBudget(input, maxIter, improve, 0, budget)
+		return SolveWithBudget(input, construct, maxIter, improve, 0, budget)
 	}
 
 	type result struct {
@@ -44,7 +49,7 @@ func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve Improve
 		wg.Add(1)
 		go func(idx int, s int64) {
 			defer wg.Done()
-			sched, err := SolveTeacherWithBudget(input, maxIter, improve, s, budget)
+			sched, err := SolveWithBudget(input, construct, maxIter, improve, s, budget)
 			results[idx] = result{sched: sched, err: err, seed: s}
 		}(i, seed)
 	}

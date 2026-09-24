@@ -92,6 +92,7 @@ POST /api/v1/schedules/generate
 {
   "name": "Осень 2026",
   "timeout_sec": 120,
+  "solver_type": "dsatur",
   "improve_algo": "hillclimb",
   "lecture_practice_same_day": false,
   "lecture_before_practice": false,
@@ -99,6 +100,7 @@ POST /api/v1/schedules/generate
 }
 ```
 
+`solver_type` (построение): `teacher` (по преподавателям, по умолчанию) | `dsatur` (самая трудная пара первой).
 `improve_algo`: `hillclimb` | `sa` | `tabu` | `ga` | `lns`.
 Три последних поля — необязательные мягкие правила, по умолчанию выключены.
 
@@ -106,6 +108,7 @@ POST /api/v1/schedules/generate
 
 ```bash
 go run ./cmd/bench -runs 5 -budget 60s -methods hillclimb,sa,lns > bench.csv
+go run ./cmd/bench -snapshots data/snapshots -construct teacher,dsatur -runs 2 -budget 45s   # без БД
 ```
 
 Несколько прогонов каждого метода на данных из БД; в CSV — score, окна и дни с одной парой
