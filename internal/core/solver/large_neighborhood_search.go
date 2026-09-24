@@ -23,6 +23,8 @@ const (
 //  1. Destroy: снимает часть пар целиком, освобождая их слоты. Набор выбирается
 //     либо случайно, либо «связанно» — все пары группы, соседних с ней по потокам,
 //     или все пары преподавателя: так освобождается место, где пары мешают друг другу.
+//     Прицельно: связанный набор от группы, у которой сейчас есть день с одной парой, —
+//     такой день не убрать одним ходом, нужно переставить её пары вместе с потоками.
 //  2. Repair: снятые пары ставятся заново по одной, первыми — у которых меньше всего
 //     допустимых слотов; каждой — лучший по полному score слот пн–пт (суббота — только
 //     если в будни места нет) и аудитория.
@@ -90,11 +92,17 @@ func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 	frac := lnsDestroyMin + rng.Float64()*(lnsDestroyMax-lnsDestroyMin)
 	ruin := newRuinSet(min(movable, max(1, int(float64(len(e.pairs))*frac))))
 
-	switch rng.Intn(3) {
+	switch rng.Intn(4) {
 	case 0:
-		addLinkedGroups(e, rng, ruin)
+		if len(e.groups) > 0 {
+			addLinkedGroups(e, rng.Intn(len(e.groups)), ruin)
+		}
 	case 1:
 		addWholeTeachers(e, rng, ruin)
+	case 2:
+		if g, ok := groupWithSingleDay(e, rng); ok {
+			addLinkedGroups(e, g, ruin)
+		}
 	}
 	for !ruin.full() {
 		ruin.add(e, rng.Intn(len(e.pairs)))
@@ -123,13 +131,24 @@ func (r *ruinSet) add(e *evaluator, i int) {
 	}
 }
 
-// addLinkedGroups — пары случайной группы и групп, связанных с ней общими потоками
-// (обход в ширину), пока набор не заполнится.
-func addLinkedGroups(e *evaluator, rng *rand.Rand, ruin *ruinSet) {
-	if len(e.groups) == 0 {
-		return
+// groupWithSingleDay — случайная группа, у которой сейчас есть день с одной парой.
+func groupWithSingleDay(e *evaluator, rng *rand.Rand) (int, bool) {
+	var found []int
+	for g := range e.groups {
+		if e.groups[g].penalty[0].SingleClassDay+e.groups[g].penalty[1].SingleClassDay > 0 {
+			found = append(found, g)
+		}
 	}
-	queue := []int{rng.Intn(len(e.groups))}
+	if len(found) == 0 {
+		return 0, false
+	}
+	return found[rng.Intn(len(found))], true
+}
+
+// addLinkedGroups — пары группы start и групп, связанных с ней общими потоками
+// (обход в ширину), пока набор не заполнится.
+func addLinkedGroups(e *evaluator, start int, ruin *ruinSet) {
+	queue := []int{start}
 	seen := map[int]bool{queue[0]: true}
 	for len(queue) > 0 && !ruin.full() {
 		g := queue[0]
