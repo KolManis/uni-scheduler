@@ -82,11 +82,11 @@ func TestSolve_PlacesAllAfterInsertion(t *testing.T) {
 
 func TestDSatur_RealDataValid(t *testing.T) {
 	input := loadSnapshotInput(t)
-	a, err := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, Budget: time.Nanosecond})
+	a, err := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, ImproveSeed: 1, Rounds: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, Budget: time.Nanosecond})
+	b, _ := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, ImproveSeed: 1, Rounds: 1})
 	if a.Score != b.Score {
 		t.Errorf("построение без зерна должно быть детерминированным: %d и %d", a.Score, b.Score)
 	}

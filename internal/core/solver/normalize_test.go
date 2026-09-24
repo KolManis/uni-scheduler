@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
@@ -67,14 +66,17 @@ func TestSolveTeacher_InputOrderDoesNotMatter(t *testing.T) {
 		return strings.Join(lines, "\n")
 	}
 
-	base, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, Budget: time.Nanosecond})
+	// Фиксированный сид и ровно один раунд улучшения (ADR-0023): результат не зависит от
+	// часов. С бюджетом по времени (1 нс) на машинах с грубыми часами улучшение успевало
+	// сделать раунд со случайным сидом, и тест падал нестабильно.
+	base, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, ImproveSeed: 1, Rounds: 1})
 	if err != nil {
 		t.Fatalf("исходный порядок: %v", err)
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Solve(tt.input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, Budget: time.Nanosecond})
+			got, err := Solve(tt.input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, ImproveSeed: 1, Rounds: 1})
 			if err != nil {
 				t.Fatalf("неожиданная ошибка: %v", err)
 			}

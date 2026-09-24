@@ -1,0 +1,11 @@
+construct,method,run,score,gaps_even,gaps_odd,long_gaps,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds,rounds
+teacher,hillclimb,1,16960,0,0,0,1,0,4,4,0,45,146
+teacher,hillclimb,2,16380,0,0,0,1,0,6,3,0,45,142
+teacher,hillclimb,3,15300,0,0,0,1,0,0,3,0,45,146
+teacher,hillclimb,4,16260,0,0,0,1,0,6,3,0,45,134
+teacher,hillclimb,5,17580,0,0,0,1,0,0,4,0,45,147
+dsatur,hillclimb,1,15000,0,0,0,1,0,0,3,0,45,155
+dsatur,hillclimb,2,15060,0,0,0,1,0,0,3,0,45,157
+dsatur,hillclimb,3,16100,0,0,0,1,0,0,4,0,45,148
+dsatur,hillclimb,4,16100,0,0,0,1,0,0,4,0,45,148
+dsatur,hillclimb,5,15060,0,0,0,1,0,0,3,0,45,156

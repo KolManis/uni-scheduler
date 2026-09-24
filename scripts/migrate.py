@@ -25,7 +25,7 @@ def post(path, body):
 # ── 1. Load current data from saved snapshots ────────────────────────────────
 print("Loading data from snapshots...")
 def load(path):
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:  # снимки сохранены с BOM
         return json.load(f)
 
 import os

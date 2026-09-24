@@ -1,0 +1,11 @@
+construct,method,run,score,gaps_even,gaps_odd,long_gaps,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds,rounds
+dsatur,hillclimb,1,25060,0,1,0,1,0,0,3,0,45,155
+dsatur,hillclimb,2,24060,0,0,0,2,0,0,3,0,45,152
+dsatur,hillclimb,3,24060,0,0,0,2,0,0,3,0,45,144
+dsatur,hillclimb,4,15360,0,0,0,1,0,0,3,0,45,150
+dsatur,hillclimb,5,24000,0,0,0,2,0,0,3,0,45,153
+dsatur,hillclimb,1,17560,0,0,0,1,0,0,4,0,45,155
+dsatur,hillclimb,2,15980,0,0,0,1,0,0,4,0,45,154
+dsatur,hillclimb,3,15180,0,0,0,1,0,0,3,0,45,154
+dsatur,hillclimb,4,37160,0,0,0,3,0,0,4,0,44,148
+dsatur,hillclimb,5,26020,0,0,0,2,0,0,4,0,45,153

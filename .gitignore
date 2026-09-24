@@ -25,6 +25,7 @@ docs/harness-engineering-guide.md
 docs/*
 !docs/spec/
 !docs/adr/
+!docs/results/
 diagrams/
 images/
 progress.md

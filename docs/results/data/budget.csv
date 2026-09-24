@@ -1,0 +1,12 @@
+10s,dsatur,hillclimb,1,37960,0,1,0,1,0,0,4,0,10,31
+10s,dsatur,hillclimb,2,44680,0,1,0,2,0,0,4,0,10,31
+10s,dsatur,hillclimb,3,76180,1,1,0,3,1,0,4,0,10,28
+20s,dsatur,hillclimb,1,32260,0,0,0,2,0,0,4,0,20,59
+20s,dsatur,hillclimb,2,29460,0,0,0,2,0,0,4,0,20,63
+20s,dsatur,hillclimb,3,20480,0,0,0,1,0,0,4,0,20,66
+45s,dsatur,hillclimb,1,24420,0,0,0,2,0,0,3,0,45,142
+45s,dsatur,hillclimb,2,16220,0,0,0,1,0,0,4,0,45,154
+45s,dsatur,hillclimb,3,24360,0,0,0,2,0,0,3,0,45,134
+90s,dsatur,hillclimb,1,15060,0,0,0,1,0,0,3,0,72,236
+90s,dsatur,hillclimb,2,15120,0,0,0,1,0,0,3,0,50,162
+90s,dsatur,hillclimb,3,15120,0,0,0,1,0,0,3,0,80,251
