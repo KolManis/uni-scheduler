@@ -9,137 +9,90 @@ import (
 
 // Параметры табу-поиска.
 const (
-	tabuTenure         = 20  // сколько последних ходов запрещены
-	tabuNeighborsLimit = 100 // сколько соседей осматриваем на одной итерации
-	tabuMaxNoImprove   = 200 // остановиться, если столько итераций не улучшили best
+	tabuTenureMin      = 10    // сколько итераций пара не может вернуться в покинутый слот (минимум)
+	tabuTenureSpread   = 10    // случайная добавка к сроку запрета: снижает зацикливание
+	tabuNeighborsLimit = 100   // сколько соседей осматриваем на одной итерации
+	tabuMaxNoImprove   = 30000 // остановиться, если столько итераций не улучшили best
 )
 
-// tabuMove — ход, который запрещён на несколько итераций. Для swap это пара индексов,
-// для or-opt — индекс назначения и его новый слот. Чтобы одинаково хранить оба вида,
-// нормализуем: kind = 0 (swap) хранит (min(i,j), max(i,j), нулевой слот),
-// kind = 1 (or-opt) — (i, -1, новый слот).
-type tabuMove struct {
-	kind byte
-	a, b int
-	slot domain.TimeSlot
-}
-
-// tabuSearch — реализация классического табу-поиска Гловера.
+// tabuSearch — табу-поиск Гловера.
 //
-// На каждой итерации ищет ЛУЧШЕГО из ~100 соседей и переходит в него, даже если это
-// временно ухудшает score. Только что сделанные ходы попадают в «табу-список»
-// на tabuTenure итераций — их нельзя обратить, что заставляет поиск исследовать
-// новые районы. Ход из списка разрешён, только если он даёт результат лучше
-// best-so-far (aspiration criterion).
+// На каждой итерации осматривает tabuNeighborsLimit случайных соседей и переходит
+// в лучшего, даже если это ухудшение. Запрет — по атрибуту «пара i в слоте s»: пара,
+// покинувшая слот, не может вернуться в него несколько итераций. Раньше запрещались
+// конкретные ходы (обмен i↔j), и возврат тем же путём через другой ход был разрешён.
+// Запрет снимается, если ход даёт новый лучший результат (критерий стремления).
 func tabuSearch(assignments []domain.Assignment, input domain.InputData,
 	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	e := newEvaluator(assignments, input, unavail)
+	best := e.snapshot()
+	bestScore := e.score()
 
-	current := cloneAssignments(assignments)
-	currentScore := calculateFitness(current, input)
-	best := cloneAssignments(current)
-	bestScore := currentScore
-
-	tabu := make([]tabuMove, 0, tabuTenure)
-	isTabu := func(m tabuMove) bool {
-		for _, t := range tabu {
-			if t == m {
+	tabuUntil := make([]int, len(e.asg)*numSlots)
+	isTabu := func(undo []move, iter int) bool {
+		for _, m := range undo {
+			// После хода пара стоит в e.slot[m.i]; запрещено возвращаться туда, где она была раньше.
+			if s := e.slot[m.i]; s != unplacedSlot && tabuUntil[m.i*numSlots+s] > iter {
 				return true
 			}
 		}
 		return false
 	}
-	pushTabu := func(m tabuMove) {
-		if len(tabu) >= tabuTenure {
-			tabu = tabu[1:]
-		}
-		tabu = append(tabu, m)
-	}
 
 	noImprove := 0
-	for noImprove < tabuMaxNoImprove && !time.Now().After(deadline) {
-		bestNeighbor := []domain.Assignment(nil)
-		bestNeighborScore := 0
-		var bestMove tabuMove
+	for iter := 1; noImprove < tabuMaxNoImprove && !time.Now().After(deadline); iter++ {
+		var bestMove []move
+		bestNeighbor := 0
 
 		for k := 0; k < tabuNeighborsLimit; k++ {
-			cand, move, ok := randomValidNeighborWithMove(current, rng, unavail)
+			undo, ok := randomMove(e, rng)
 			if !ok {
 				continue
 			}
-			candScore := calculateFitness(cand, input)
-
-			// Aspiration: табу можно нарушить, если это даёт новый глобальный минимум.
-			if isTabu(move) && candScore >= bestScore {
-				continue
+			s := e.score()
+			allowed := !isTabu(undo, iter) || s < bestScore
+			if allowed && (bestMove == nil || s < bestNeighbor) {
+				bestMove = forwardOf(e, undo)
+				bestNeighbor = s
 			}
-
-			if bestNeighbor == nil || candScore < bestNeighborScore {
-				bestNeighbor = cand
-				bestNeighborScore = candScore
-				bestMove = move
-			}
+			e.apply(undo)
 		}
-
-		if bestNeighbor == nil {
+		if bestMove == nil {
 			break
 		}
 
-		current = bestNeighbor
-		currentScore = bestNeighborScore
-		pushTabu(bestMove)
+		undo, ok := e.apply(bestMove)
+		if !ok {
+			continue
+		}
+		tenure := tabuTenureMin + rng.Intn(tabuTenureSpread+1)
+		for _, m := range undo {
+			if m.slot != unplacedSlot {
+				tabuUntil[m.i*numSlots+m.slot] = iter + tenure
+			}
+		}
 
-		if currentScore < bestScore {
-			best = cloneAssignments(current)
-			bestScore = currentScore
+		if s := e.score(); s < bestScore {
+			best = e.snapshot()
+			bestScore = s
 			noImprove = 0
 		} else {
 			noImprove++
 		}
 	}
 
-	// Финальный converge — табу-поиск мог оставить недошлифованное решение.
-	best = converge(best, input, deadline, unavail)
-	return best
+	e.restore(best)
+	convergeEval(e, deadline.Add(5*time.Second))
+	return e.assignments()
 }
 
-// randomValidNeighborWithMove делает то же, что randomValidNeighbor, но заодно
-// возвращает ход — нужен для табу-списка.
-func randomValidNeighborWithMove(current []domain.Assignment, rng *rand.Rand,
-	unavail teacherUnavailable) ([]domain.Assignment, tabuMove, bool) {
-
-	if len(current) < 2 {
-		return nil, tabuMove{}, false
+// forwardOf — ход, который привёл к текущему состоянию, по его откату.
+func forwardOf(e *evaluator, undo []move) []move {
+	fwd := make([]move, len(undo))
+	for k, m := range undo {
+		fwd[k] = move{m.i, e.slot[m.i], e.info[m.i].room}
 	}
-	for attempt := 0; attempt < 20; attempt++ {
-		if rng.Intn(2) == 0 {
-			i := rng.Intn(len(current))
-			j := rng.Intn(len(current))
-			if i == j || current[i].TimeSlot == current[j].TimeSlot {
-				continue
-			}
-			if j < i {
-				i, j = j, i
-			}
-			cand := swapSlots(current, i, j)
-			if checkHardConstraints(cand, unavail) {
-				return cand, tabuMove{kind: 0, a: i, b: j}, true
-			}
-		} else {
-			i := rng.Intn(len(current))
-			day := domain.AllDays[rng.Intn(5)]
-			pair := 1 + rng.Intn(6)
-			newSlot := domain.MustNewTimeSlot(day, pair)
-			if current[i].TimeSlot == newSlot {
-				continue
-			}
-			cand := cloneAssignments(current)
-			cand[i].TimeSlot = newSlot
-			if checkHardConstraints(cand, unavail) {
-				return cand, tabuMove{kind: 1, a: i, slot: newSlot}, true
-			}
-		}
-	}
-	return nil, tabuMove{}, false
+	return fwd
 }

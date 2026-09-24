@@ -2,18 +2,23 @@
 // медиана и разброс score плюс показатели качества. Результат — CSV в stdout.
 //
 //	go run ./cmd/bench -runs 5 -budget 60s -methods hillclimb,sa,lns > bench.csv
+//	go run ./cmd/bench -snapshots data/snapshots -runs 3 -budget 30s   # без БД
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/KolManis/uni-scheduler/internal/adapters/out/postgres"
+	"github.com/KolManis/uni-scheduler/internal/core/domain"
 	"github.com/KolManis/uni-scheduler/internal/core/solver"
 )
 
@@ -23,18 +28,17 @@ func main() {
 		runs    = flag.Int("runs", 5, "прогонов на метод")
 		budget  = flag.Duration("budget", 60*time.Second, "бюджет локального поиска на прогон")
 		methods = flag.String("methods", "hillclimb,sa,tabu,ga,lns", "методы через запятую")
+		snaps   = flag.String("snapshots", "", "каталог JSON-снимков справочников вместо БД (например, data/snapshots)")
 	)
 	flag.Parse()
 
-	ctx := context.Background()
-	pool, err := postgres.Open(ctx, *dsn)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "подключение к БД:", err)
-		os.Exit(1)
+	var data *domain.InputData
+	var err error
+	if *snaps != "" {
+		data, err = loadSnapshots(*snaps)
+	} else {
+		data, err = loadFromDB(*dsn)
 	}
-	defer pool.Close()
-
-	data, err := postgres.NewInputRepository(pool).LoadInput(ctx)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "загрузка входных данных:", err)
 		os.Exit(1)
@@ -66,4 +70,41 @@ func main() {
 				algo, scores[len(scores)/2], scores[0], scores[len(scores)-1], len(scores))
 		}
 	}
+}
+
+func loadFromDB(dsn string) (*domain.InputData, error) {
+	ctx := context.Background()
+	pool, err := postgres.Open(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("подключение к БД: %w", err)
+	}
+	defer pool.Close()
+	return postgres.NewInputRepository(pool).LoadInput(ctx)
+}
+
+// loadSnapshots читает справочники из JSON-файлов, которые заливает make seed.
+func loadSnapshots(dir string) (*domain.InputData, error) {
+	var in domain.InputData
+	files := []struct {
+		name string
+		dst  any
+	}{
+		{"buildings.json", &in.Buildings},
+		{"departments.json", &in.Departments},
+		{"groups.json", &in.Groups},
+		{"teachers.json", &in.Teachers},
+		{"rooms.json", &in.Rooms},
+		{"subject_plans.json", &in.SubjectPlans},
+	}
+	for _, f := range files {
+		raw, err := os.ReadFile(filepath.Join(dir, f.name))
+		if err != nil {
+			return nil, err
+		}
+		raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
+		if err := json.Unmarshal(raw, f.dst); err != nil {
+			return nil, fmt.Errorf("%s: %w", f.name, err)
+		}
+	}
+	return &in, nil
 }

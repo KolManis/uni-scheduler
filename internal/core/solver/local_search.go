@@ -8,16 +8,14 @@ import (
 )
 
 const (
-	// localSearchTotalBudget — жёсткий потолок на ВСЮ работу LocalSearch (и обычную
-	// сходимость converge, и iteratedLocalSearch поверх неё). На реальном датасете
-	// (300+ занятий) один проход twoOpt/orOpt сам по себе не бесплатный — без общего
-	// потолка converge в цикле "пока есть улучшение" мог разово растянуться на минуты.
-	// Замерено: один проход twoOpt+orOpt на 362 занятиях сходится ~35 сек — бюджет должен
-	// быть больше этого, иначе converge просто не успевает сравняться со старым качеством.
+	// localSearchTotalBudget — потолок на всю работу LocalSearch (сходимость и метаэвристику).
+	// С инкрементальной оценкой (evaluator) сходимость на 362 парах занимает доли секунды,
+	// остальное время достаётся метаэвристике. Отжиг использует бюджет целиком, остальные
+	// методы останавливаются раньше по застою.
 	localSearchTotalBudget = 60 * time.Second
 	// localSearchMaxStagnation — если столько раундов iteratedLocalSearch подряд не дали
 	// улучшения, прекращаем раньше срока (на маленьких расписаниях сходится почти мгновенно).
-	localSearchMaxStagnation = 40
+	localSearchMaxStagnation = 60
 )
 
 // teacherUnavailable — предвычисленные недоступные слоты преподавателей (HC7).
@@ -91,172 +89,267 @@ func LocalSearch(assignments []domain.Assignment, input domain.InputData, algo I
 	return current
 }
 
-// converge крутит twoOpt и orOpt по очереди, пока очередной раунд обоих даёт
-// строгое улучшение суммарного score, но не дольше deadline.
+// converge доводит расписание до локального оптимума (см. convergeEval).
 func converge(assignments []domain.Assignment, input domain.InputData, deadline time.Time,
 	unavail teacherUnavailable) []domain.Assignment {
-	current := assignments
-	currentScore := calculateFitness(current, input)
+	e := newEvaluator(assignments, input, unavail)
+	convergeEval(e, deadline)
+	return e.assignments()
+}
+
+// convergeEval крутит окрестности по очереди, пока очередной раунд даёт строгое
+// улучшение score, но не дольше deadline:
+//   - 2-opt — обмен слотами двух пар;
+//   - or-opt — перенос пары в другой слот пн–пт (с подбором другой аудитории, если своя занята);
+//   - смена аудитории — влияет на переходы между корпусами;
+//   - обмен днями группы — все пары группы из одного дня переезжают в другой и наоборот.
+//     Одиночные ходы такого не находят: каждый промежуточный шаг создаёт окно.
+func convergeEval(e *evaluator, deadline time.Time) {
 	for !time.Now().After(deadline) {
-		next := twoOpt(current, input, deadline, unavail)
-		next = orOpt(next, input, deadline, unavail)
-		nextScore := calculateFitness(next, input)
-		if nextScore >= currentScore {
-			return current
-		}
-		current = next
-		currentScore = nextScore
-	}
-	return current
-}
-
-// iteratedLocalSearch — классический iterated local search: возмущаем текущее лучшее
-// решение случайными (но допустимыми по HC1-3) перестановками слотов, заново сходимся
-// через converge, и оставляем результат, только если он строго лучше уже найденного.
-func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData, deadline time.Time,
-	unavail teacherUnavailable) []domain.Assignment {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	best := assignments
-	bestScore := calculateFitness(best, input)
-	current := best
-
-	stagnant := 0
-	for stagnant < localSearchMaxStagnation && !time.Now().After(deadline) {
-		perturbed := perturb(current, rng, unavail)
-		reoptimized := converge(perturbed, input, deadline, unavail)
-		score := calculateFitness(reoptimized, input)
-
-		if score < bestScore {
-			best = reoptimized
-			bestScore = score
-			current = reoptimized
-			stagnant = 0
-		} else {
-			current = best
-			stagnant++
+		before := e.score()
+		twoOptPass(e, deadline)
+		orOptPass(e, deadline)
+		roomPass(e, deadline)
+		groupDayPass(e, deadline)
+		if e.score() >= before {
+			return
 		}
 	}
-	return best
 }
 
-// perturb делает несколько случайных (но проверенных на HC1-3) обменов слотами —
-// "толчок", чтобы вывести поиск из локального оптимума. Может временно ухудшить score:
-// это не проблема, дальше идёт полноценный converge, а итоговый результат отбирается
-// в iteratedLocalSearch только если он лучше предыдущего лучшего.
-func perturb(assignments []domain.Assignment, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
-	current := make([]domain.Assignment, len(assignments))
-	copy(current, assignments)
-	if len(current) < 2 {
-		return current
+// keepIfBetter оставляет применённый ход, если score стал меньше cur, иначе откатывает.
+func keepIfBetter(e *evaluator, undo []move, cur int) (int, bool) {
+	if s := e.score(); s < cur {
+		return s, true
 	}
-
-	kicks := 2 + rng.Intn(3) // 2-4 случайных обмена за один "толчок"
-	for k := 0; k < kicks; k++ {
-		for attempt := 0; attempt < 20; attempt++ {
-			i := rng.Intn(len(current))
-			j := rng.Intn(len(current))
-			if i == j || current[i].TimeSlot == current[j].TimeSlot {
-				continue
-			}
-			swapped := swapSlots(current, i, j)
-			if swapped != nil && checkHardConstraints(swapped, unavail) {
-				current = swapped
-				break
-			}
-		}
-	}
-	return current
+	e.apply(undo)
+	return cur, false
 }
 
-// twoOpt — попарный обмен слотами, устраняет окна.
-func twoOpt(assignments []domain.Assignment, input domain.InputData, deadline time.Time,
-	unavail teacherUnavailable) []domain.Assignment {
-	current := make([]domain.Assignment, len(assignments))
-	copy(current, assignments)
-	currentScore := calculateFitness(current, input)
-
-	improved := true
-	for improved {
+// twoOptPass — попарный обмен слотами до исчерпания улучшений.
+func twoOptPass(e *evaluator, deadline time.Time) {
+	cur := e.score()
+	for improved := true; improved; {
 		improved = false
-		for i := 0; i < len(current); i++ {
+		for i := range e.asg {
 			if time.Now().After(deadline) {
-				return current
+				return
 			}
-			for j := i + 1; j < len(current); j++ {
-				if current[i].TimeSlot == current[j].TimeSlot {
+			for j := i + 1; j < len(e.asg); j++ {
+				if e.slot[i] == e.slot[j] || e.slot[i] == unplacedSlot || e.slot[j] == unplacedSlot {
 					continue
 				}
-				swapped := swapSlots(current, i, j)
-				if swapped == nil || !checkHardConstraints(swapped, unavail) {
+				undo, ok := e.swap(i, j)
+				if !ok {
 					continue
 				}
-				newScore := calculateFitness(swapped, input)
-				if newScore < currentScore {
-					current = swapped
-					currentScore = newScore
+				var better bool
+				if cur, better = keepIfBetter(e, undo, cur); better {
 					improved = true
 				}
 			}
 		}
 	}
-	return current
 }
 
-// orOpt — перемещает одно назначение в другой день/слот.
-// Целенаправленно убирает перегрузку конкретных дней у групп.
-func orOpt(assignments []domain.Assignment, input domain.InputData, deadline time.Time,
-	unavail teacherUnavailable) []domain.Assignment {
-	current := make([]domain.Assignment, len(assignments))
-	copy(current, assignments)
-	currentScore := calculateFitness(current, input)
-
-	weekdays := []domain.Day{
-		domain.Monday, domain.Tuesday, domain.Wednesday,
-		domain.Thursday, domain.Friday,
-	}
-
-	improved := true
-	for improved {
+// orOptPass — перенос одной пары в другой слот пн–пт до исчерпания улучшений.
+func orOptPass(e *evaluator, deadline time.Time) {
+	cur := e.score()
+	for improved := true; improved; {
 		improved = false
-		for i := 0; i < len(current); i++ {
+		for i := range e.asg {
 			if time.Now().After(deadline) {
-				return current
+				return
 			}
-			origSlot := current[i].TimeSlot
-			for _, day := range weekdays {
-				if day == origSlot.Day() {
+			for s := 0; s < saturdayIdx*6; s++ {
+				if s == e.slot[i] || e.slot[i] == unplacedSlot {
 					continue
 				}
-				for pairNum := 1; pairNum <= 6; pairNum++ {
-					candidate := make([]domain.Assignment, len(current))
-					copy(candidate, current)
-					candidate[i].TimeSlot = domain.MustNewTimeSlot(day, pairNum)
-
-					if !checkHardConstraints(candidate, unavail) {
-						continue
-					}
-					newScore := calculateFitness(candidate, input)
-					if newScore < currentScore {
-						current = candidate
-						currentScore = newScore
-						improved = true
-					}
+				undo, ok := e.relocate(i, s)
+				if !ok {
+					continue
+				}
+				var better bool
+				if cur, better = keepIfBetter(e, undo, cur); better {
+					improved = true
 				}
 			}
 		}
 	}
-	return current
 }
 
-// swapSlots возвращает копию assignments с переставленными TimeSlot для i и j.
-// BuildingID не меняется: корпус определяется аудиторией, а не временным слотом.
-func swapSlots(assignments []domain.Assignment, i, j int) []domain.Assignment {
-	result := make([]domain.Assignment, len(assignments))
-	copy(result, assignments)
-	result[i].TimeSlot = assignments[j].TimeSlot
-	result[j].TimeSlot = assignments[i].TimeSlot
-	return result
+// roomPass — пара остаётся в своём слоте, но переходит в другую допустимую аудиторию.
+func roomPass(e *evaluator, deadline time.Time) {
+	cur := e.score()
+	for i := range e.asg {
+		if time.Now().After(deadline) {
+			return
+		}
+		if e.slot[i] == unplacedSlot {
+			continue
+		}
+		for _, r := range e.info[i].cands {
+			if r == e.info[i].room {
+				continue
+			}
+			undo, ok := e.apply([]move{{i, e.slot[i], r}})
+			if !ok {
+				continue
+			}
+			cur, _ = keepIfBetter(e, undo, cur)
+		}
+	}
+}
+
+// groupDayMoves — ход «обмен днями»: пары группы g из дня d1 переезжают в d2 на те же
+// номера пар и наоборот. nil — если в обоих днях у группы пусто.
+func groupDayMoves(e *evaluator, g, d1, d2 int) []move {
+	var moves []move
+	for _, i := range e.groups[g].members {
+		s := e.slot[i]
+		if s == unplacedSlot {
+			continue
+		}
+		switch s / 6 {
+		case d1:
+			moves = append(moves, move{i, d2*6 + s%6, e.info[i].room})
+		case d2:
+			moves = append(moves, move{i, d1*6 + s%6, e.info[i].room})
+		}
+	}
+	return moves
+}
+
+func groupDayPass(e *evaluator, deadline time.Time) {
+	cur := e.score()
+	for g := range e.groups {
+		if time.Now().After(deadline) {
+			return
+		}
+		for d1 := 0; d1 < saturdayIdx; d1++ {
+			for d2 := d1 + 1; d2 < saturdayIdx; d2++ {
+				moves := groupDayMoves(e, g, d1, d2)
+				if len(moves) == 0 {
+					continue
+				}
+				undo, ok := e.apply(moves)
+				if !ok {
+					continue
+				}
+				cur, _ = keepIfBetter(e, undo, cur)
+			}
+		}
+	}
+}
+
+// randomMove — случайный допустимый ход: обмен, перенос, смена аудитории или обмен
+// днями группы. Возвращает откат; ok == false, если за 20 попыток ничего не нашлось.
+func randomMove(e *evaluator, rng *rand.Rand) ([]move, bool) {
+	n := len(e.asg)
+	if n < 2 {
+		return nil, false
+	}
+	for attempt := 0; attempt < 20; attempt++ {
+		i := rng.Intn(n)
+		if e.slot[i] == unplacedSlot {
+			continue
+		}
+		var undo []move
+		var ok bool
+		switch r := rng.Intn(20); {
+		case r < 8:
+			j := rng.Intn(n)
+			if i == j || e.slot[i] == e.slot[j] || e.slot[j] == unplacedSlot {
+				continue
+			}
+			undo, ok = e.swap(i, j)
+		case r < 16:
+			s := rng.Intn(saturdayIdx * 6)
+			if s == e.slot[i] {
+				continue
+			}
+			undo, ok = e.relocate(i, s)
+		case r < 18:
+			cands := e.info[i].cands
+			if len(cands) < 2 {
+				continue
+			}
+			room := cands[rng.Intn(len(cands))]
+			if room == e.info[i].room {
+				continue
+			}
+			undo, ok = e.apply([]move{{i, e.slot[i], room}})
+		default:
+			if len(e.groups) == 0 {
+				continue
+			}
+			g := rng.Intn(len(e.groups))
+			d1, d2 := rng.Intn(saturdayIdx), rng.Intn(saturdayIdx)
+			if d1 == d2 {
+				continue
+			}
+			moves := groupDayMoves(e, g, d1, d2)
+			if len(moves) == 0 {
+				continue
+			}
+			undo, ok = e.apply(moves)
+		}
+		if ok {
+			return undo, true
+		}
+	}
+	return nil, false
+}
+
+// snapshot — слоты и аудитории всех пар; restore возвращает расписание к снимку.
+func (e *evaluator) snapshot() []move {
+	s := make([]move, len(e.asg))
+	for i := range e.asg {
+		s[i] = move{i, e.slot[i], e.info[i].room}
+	}
+	return s
+}
+
+func (e *evaluator) restore(snap []move) {
+	if _, ok := e.apply(snap); !ok {
+		panic("solver: снимок расписания нарушает жёсткие ограничения")
+	}
+}
+
+// iteratedLocalSearch — iterated local search: толчок из нескольких случайных ходов,
+// сходимость, и принимаем результат, если он не хуже лучшего. Равные принимаются, чтобы
+// поиск мог двигаться по «плато» одинаковых score. Сила толчка растёт с застоем.
+func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData, deadline time.Time,
+	unavail teacherUnavailable) []domain.Assignment {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	e := newEvaluator(assignments, input, unavail)
+	best := e.snapshot()
+	bestScore := e.score()
+
+	stagnant := 0
+	for stagnant < localSearchMaxStagnation && !time.Now().After(deadline) {
+		kicks := 2 + rng.Intn(3) + stagnant/8
+		for k := 0; k < kicks; k++ {
+			randomMove(e, rng)
+		}
+		convergeEval(e, deadline)
+		score := e.score()
+
+		switch {
+		case score < bestScore:
+			stagnant = 0
+		case score == bestScore:
+			stagnant++
+		default:
+			e.restore(best)
+			stagnant++
+			continue
+		}
+		best = e.snapshot()
+		bestScore = score
+	}
+	e.restore(best)
+	return e.assignments()
 }
 
 // checkHardConstraints проверяет HC1–HC3 (двойная занятость преподавателя, группы, аудитории)

@@ -2,6 +2,7 @@ package solver
 
 import (
 	"math/rand"
+	"sort"
 	"time"
 
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
@@ -9,89 +10,154 @@ import (
 
 // Параметры LNS.
 const (
-	lnsDestroyFraction = 0.20 // сколько назначений «сносим» на одном шаге
-	lnsMaxNoImprove    = 30   // остановиться, если столько итераций подряд без улучшения
+	lnsDestroyMin   = 0.05 // доля снимаемых пар: минимум…
+	lnsDestroyMax   = 0.20 // …и максимум, выбирается случайно на каждой итерации
+	lnsMaxNoImprove = 300  // остановиться, если столько итераций подряд без улучшения
 )
 
-// largeNeighborhoodSearch — «разрушение-восстановление» (Very Large Neighborhood Search).
+// largeNeighborhoodSearch — разрушение и восстановление (ruin & recreate).
 //
-// Классический локальный поиск (2-opt, or-opt) двигает одно назначение за шаг: если
-// улучшить расписание можно только согласованным переносом нескольких пар, он этого
-// увидеть не в состоянии. LNS решает это перебором «больших» окрестностей:
+// Локальный поиск двигает одну-две пары за шаг и не видит улучшений, требующих
+// согласованного переноса нескольких пар. LNS:
 //
-//  1. Destroy: 20% случайных пар откладываются в сторону — их слоты «стираются».
-//  2. Repair: для каждой отложенной пары находится ЛУЧШИЙ слот с учётом ВСЕХ
-//     остальных (не только тех, что были на построении). Оценка по полному fitness,
-//     а не по частичному slotPenalty — здесь мы видим окна и перегрузки целиком.
-//  3. Converge: обычный 2-opt/or-opt поверх восстановленного.
+//  1. Destroy: снимает часть пар целиком, освобождая их слоты. Набор выбирается
+//     либо случайно, либо «связанно» — все пары группы, соседних с ней по потокам,
+//     или все пары преподавателя: так освобождается место, где пары мешают друг другу.
+//  2. Repair: снятые пары ставятся заново по одной, первыми — у которых меньше всего
+//     допустимых слотов; каждой — лучший по полному score слот пн–пт (суббота — только
+//     если в будни места нет) и аудитория.
+//  3. Converge поверх восстановленного.
 //
-// Если получилось лучше — принимаем; иначе возвращаемся к best и пробуем снова.
+// Результат принимается, если он не хуже лучшего; иначе возврат к лучшему.
+// Раньше «разрушение» переносило пары по одной, не освобождая их слотов заранее,
+// — по сути это был тот же or-opt.
 func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.InputData,
 	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	best := cloneAssignments(assignments)
-	bestScore := calculateFitness(best, input)
+	e := newEvaluator(assignments, input, unavail)
+	if len(e.asg) < 2 {
+		return e.assignments()
+	}
+	best := e.snapshot()
+	bestScore := e.score()
+
 	noImprove := 0
-
 	for noImprove < lnsMaxNoImprove && !time.Now().After(deadline) {
-		candidate := cloneAssignments(best)
-
-		// Destroy + repair: N случайных назначений двигаем в лучший из 36 слотов.
-		n := len(candidate)
-		destroyCount := int(float64(n) * lnsDestroyFraction)
-		if destroyCount < 1 {
-			destroyCount = 1
+		ruined := chooseRuin(e, rng)
+		unplace := make([]move, len(ruined))
+		for k, i := range ruined {
+			unplace[k] = move{i, unplacedSlot, e.info[i].room}
 		}
-		for k := 0; k < destroyCount; k++ {
-			i := rng.Intn(n)
-			candidate = repairOne(candidate, i, input, unavail)
-			if time.Now().After(deadline) {
-				break
-			}
+		e.apply(unplace)
+
+		if !recreate(e, ruined) {
+			e.restore(best)
+			noImprove++
+			continue
 		}
+		convergeEval(e, deadline)
 
-		// Converge: доводим до локального оптимума.
-		candidate = converge(candidate, input, deadline, unavail)
-		score := calculateFitness(candidate, input)
-
-		if score < bestScore {
-			best = candidate
-			bestScore = score
-			noImprove = 0
-		} else {
+		switch s := e.score(); {
+		case s < bestScore:
+			best, bestScore, noImprove = e.snapshot(), s, 0
+		case s == bestScore:
+			best = e.snapshot()
+			noImprove++
+		default:
+			e.restore(best)
 			noImprove++
 		}
 	}
-	return best
+	e.restore(best)
+	return e.assignments()
 }
 
-// repairOne находит лучший слот для назначения i (перебирая все 36) с учётом текущего
-// расписания. Возвращает копию с назначением в новом слоте либо исходную, если
-// ни один слот не даёт улучшения.
-func repairOne(assignments []domain.Assignment, i int, input domain.InputData,
-	unavail teacherUnavailable) []domain.Assignment {
+// chooseRuin — какие пары снять на этой итерации.
+func chooseRuin(e *evaluator, rng *rand.Rand) []int {
+	n := len(e.asg)
+	frac := lnsDestroyMin + rng.Float64()*(lnsDestroyMax-lnsDestroyMin)
+	k := max(1, int(float64(n)*frac))
 
-	best := assignments
-	bestScore := calculateFitness(best, input)
+	picked := make(map[int]bool, k)
+	var out []int
+	add := func(i int) {
+		if !picked[i] && len(out) < k {
+			picked[i] = true
+			out = append(out, i)
+		}
+	}
 
-	for _, day := range domain.AllDays {
-		for pair := 1; pair <= 6; pair++ {
-			slot := domain.MustNewTimeSlot(day, pair)
-			if assignments[i].TimeSlot == slot {
-				continue
+	switch rng.Intn(3) {
+	case 0: // связанные группы: начинаем с одной и идём по общим потокам
+		if len(e.groups) > 0 {
+			queue := []int{rng.Intn(len(e.groups))}
+			seen := map[int]bool{queue[0]: true}
+			for len(queue) > 0 && len(out) < k {
+				g := queue[0]
+				queue = queue[1:]
+				for _, i := range e.groups[g].members {
+					add(i)
+					for _, other := range e.info[i].groups {
+						if !seen[other] {
+							seen[other] = true
+							queue = append(queue, other)
+						}
+					}
+				}
 			}
-			cand := cloneAssignments(assignments)
-			cand[i].TimeSlot = slot
-			if !checkHardConstraints(cand, unavail) {
-				continue
-			}
-			score := calculateFitness(cand, input)
-			if score < bestScore {
-				best = cand
-				bestScore = score
+		}
+	case 1: // преподаватели целиком
+		for tries := 0; len(out) < k && tries < 10 && len(e.teachers) > 0; tries++ {
+			for _, i := range e.teachers[rng.Intn(len(e.teachers))].members {
+				add(i)
 			}
 		}
 	}
-	return best
+	for len(out) < k {
+		add(rng.Intn(n))
+	}
+	return out
+}
+
+// recreate ставит снятые пары обратно жадно, трудные первыми. false — если какую-то
+// пару поставить некуда (тогда вызывающий откатывается к лучшему решению).
+func recreate(e *evaluator, ruined []int) bool {
+	options := make(map[int]int, len(ruined))
+	for _, i := range ruined {
+		for s := 0; s < numSlots; s++ {
+			if e.fits(i, s, e.info[i].room) {
+				options[i]++
+			}
+		}
+	}
+	sort.SliceStable(ruined, func(a, b int) bool { return options[ruined[a]] < options[ruined[b]] })
+
+	for _, i := range ruined {
+		if !placeBest(e, i, 0, saturdayIdx*6) && !placeBest(e, i, saturdayIdx*6, numSlots) {
+			return false
+		}
+	}
+	return true
+}
+
+// placeBest ставит снятую пару i в лучший слот из [from, to). false — если ни один не подошёл.
+func placeBest(e *evaluator, i, from, to int) bool {
+	var bestMove move
+	bestScore, found := 0, false
+	for s := from; s < to; s++ {
+		undo, ok := e.relocate(i, s)
+		if !ok {
+			continue
+		}
+		if sc := e.score(); !found || sc < bestScore {
+			bestMove, bestScore, found = move{i, s, e.info[i].room}, sc, true
+		}
+		e.apply(undo)
+	}
+	if !found {
+		return false
+	}
+	_, ok := e.apply([]move{bestMove})
+	return ok
 }
