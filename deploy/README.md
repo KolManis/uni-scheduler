@@ -56,7 +56,7 @@ docker compose up -d       # запустить снова
 идемпотентны) накатываются вручную, расписания сохраняются:
 
 ```bash
-for f in migrations/0003_*.sql migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql; do
+for f in migrations/000[3-8]_*.sql; do
   docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U scheduler -d scheduler < "$f"
 done
 ```
