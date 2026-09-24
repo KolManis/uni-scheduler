@@ -16,7 +16,7 @@ import (
 )
 
 type excelScheduleService interface {
-	GetByID(ctx context.Context, id int64) (*domain.Schedule, error)
+	GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error)
 }
 
 type ExcelHandler struct {
@@ -45,7 +45,7 @@ func (h *ExcelHandler) Export(w http.ResponseWriter, r *http.Request) {
 		weekParam = "both"
 	}
 
-	sched, err := h.usecase.GetByID(r.Context(), scheduleID)
+	sched, err := h.usecase.GetSchedule(r.Context(), scheduleID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "schedule not found")
 		return

@@ -84,12 +84,10 @@
 {{if .Schedule.Unplaced}}
 <div class="banner error">
   Не удалось разместить {{len .Schedule.Unplaced}} занятие(й) — не хватило свободных слотов/аудиторий с учётом ограничений,
-  в том числе после попытки освободить место перестановкой до трёх соседних пар.
-  Возможные причины: недостаточно аудиторий нужного типа (`requires_room_type`), маленькая вместимость для потока,
-  преподаватель перегружен (`max_weekly_hours`) или слишком много `unavailable_slots`.
+  в том числе после попытки освободить место перестановкой до трёх соседних пар. Причина — в последней колонке.
 </div>
 <table style="margin-bottom:20px;">
-  <thead><tr><th>Дисциплина</th><th>Тип</th><th>Преподаватель</th><th>Группы</th><th>Нужен тип ауд.</th><th>Не хватает часов</th></tr></thead>
+  <thead><tr><th>Дисциплина</th><th>Тип</th><th>Преподаватель</th><th>Группы</th><th>Нужен тип ауд.</th><th>Не хватает часов</th><th>Причина</th></tr></thead>
   <tbody>
     {{range .Schedule.Unplaced}}
     {{$plan := planByID $subjectPlans .SubjectID}}
@@ -100,6 +98,7 @@
       <td>{{joinNames $groups $plan.GroupIDs}}</td>
       <td>{{if $plan.RequiresRoomType}}{{$plan.RequiresRoomType}}{{else}}<span class="muted">любой</span>{{end}}</td>
       <td class="score-bad">{{.MissingHours}}</td>
+      <td>{{if .Reason}}{{.Reason}}{{else}}<span class="muted">не определена (расписание составлено до появления этой проверки)</span>{{end}}</td>
     </tr>
     {{end}}
   </tbody>

@@ -43,15 +43,16 @@ type refWriter interface {
 }
 
 type scheduleService interface {
-	Generate(ctx context.Context, in app.GenerateInput) (*domain.Schedule, error)
-	GenerateAllMethods(ctx context.Context, in app.GenerateInput) ([]*domain.Schedule, error)
-	GetByID(ctx context.Context, id int64) (*domain.Schedule, error)
-	List(ctx context.Context) ([]domain.ScheduleSummary, error)
+	GenerateSchedule(ctx context.Context, cmd app.GenerateCommand) (*domain.Schedule, error)
+	GenerateAllMethods(ctx context.Context, cmd app.GenerateCommand) ([]*domain.Schedule, error)
+	GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error)
+	ListSchedules(ctx context.Context) ([]domain.ScheduleSummary, error)
 	Breakdown(sched *domain.Schedule, input domain.InputData) domain.FitnessBreakdown
 	Quality(sched *domain.Schedule) domain.WeekQuality
-	Delete(ctx context.Context, id int64) error
-	PatchAssignment(ctx context.Context, schedID int64, idx int, req app.PatchRequest) (*domain.Schedule, error)
-	SetPinned(ctx context.Context, schedID int64, idx int, pinned bool) (*domain.Schedule, error)
+	DeleteSchedule(ctx context.Context, id int64) error
+	MoveAssignment(ctx context.Context, cmd app.MoveAssignmentCommand) (*domain.Schedule, error)
+	PinAssignment(ctx context.Context, cmd app.PinAssignmentCommand) (*domain.Schedule, error)
+	CheckInput(ctx context.Context) ([]app.InputProblem, error)
 	MoveOptions(ctx context.Context, schedID int64, idx int) ([]app.MoveOption, error)
 }
 

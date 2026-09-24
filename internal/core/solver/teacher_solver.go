@@ -107,17 +107,18 @@ func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve Improve
 type Construction string
 
 const (
-	ConstructTeacher Construction = "teacher" // по преподавателям, от самых ограниченных (по умолчанию)
-	ConstructDSatur  Construction = "dsatur"  // самая трудная пара первой (DSatur, раскраска графа)
+	ConstructTeacher Construction = "teacher" // по преподавателям, от самых ограниченных
+	ConstructDSatur  Construction = "dsatur"  // самая трудная пара первой (DSatur, раскраска графа; по умолчанию)
 )
 
-// ParseConstruction — алгоритм построения по значению solver_type. Пустое — по умолчанию.
+// ParseConstruction — алгоритм построения по значению solver_type. Пустое — DSatur:
+// с ним улучшение даёт лучший и самый стабильный результат (ADR-0019).
 func ParseConstruction(s string) (Construction, bool) {
 	switch Construction(s) {
-	case "", ConstructTeacher:
-		return ConstructTeacher, true
-	case ConstructDSatur:
+	case "", ConstructDSatur:
 		return ConstructDSatur, true
+	case ConstructTeacher:
+		return ConstructTeacher, true
 	}
 	return "", false
 }

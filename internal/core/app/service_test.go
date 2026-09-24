@@ -89,7 +89,7 @@ func TestPatchAssignment_TeacherAvailability(t *testing.T) {
 			}}
 			svc := NewService(input, output, nil)
 
-			_, err := svc.PatchAssignment(context.Background(), 1, 0, PatchRequest{TimeSlot: tt.newSlot})
+			_, err := svc.MoveAssignment(context.Background(), MoveAssignmentCommand{ScheduleID: 1, Index: 0, TimeSlot: tt.newSlot})
 
 			var conflict *ConflictError
 			gotConflict := ""
@@ -131,7 +131,7 @@ func TestPatchAssignment_ExternalPair(t *testing.T) {
 			}}}}
 			svc := NewService(input, output, nil)
 
-			_, err := svc.PatchAssignment(context.Background(), 1, 0, PatchRequest{TimeSlot: slot, Parity: tt.parity})
+			_, err := svc.MoveAssignment(context.Background(), MoveAssignmentCommand{ScheduleID: 1, Index: 0, TimeSlot: slot, Parity: tt.parity})
 
 			var conflict *ConflictError
 			got := ""

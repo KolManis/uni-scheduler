@@ -99,7 +99,7 @@ func TestDSatur_RealDataValid(t *testing.T) {
 }
 
 func TestParseConstruction(t *testing.T) {
-	for in, want := range map[string]Construction{"": ConstructTeacher, "teacher": ConstructTeacher, "dsatur": ConstructDSatur} {
+	for in, want := range map[string]Construction{"": ConstructDSatur, "teacher": ConstructTeacher, "dsatur": ConstructDSatur} {
 		if got, ok := ParseConstruction(in); !ok || got != want {
 			t.Errorf("%q: получено %q, %v", in, got, ok)
 		}

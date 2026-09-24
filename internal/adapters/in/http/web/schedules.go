@@ -12,9 +12,30 @@ import (
 )
 
 type schedulesListData struct {
-	Schedules []domain.ScheduleSummary
-	Error     string
-	Success   string
+	Schedules       []domain.ScheduleSummary
+	Problems        []app.InputProblem // проверка данных до генерации
+	ProblemErrors   int
+	ProblemWarnings int
+	Error           string
+	Success         string
+}
+
+// withProblems дописывает к странице списка результат проверки данных. Если проверка
+// не удалась, страница показывается без неё: генерации это не мешает.
+func (h *Handler) withProblems(r *http.Request, d schedulesListData) schedulesListData {
+	problems, err := h.svc.CheckInput(r.Context())
+	if err != nil {
+		return d
+	}
+	d.Problems = problems
+	for _, p := range problems {
+		if p.Severity == app.ProblemError {
+			d.ProblemErrors++
+		} else {
+			d.ProblemWarnings++
+		}
+	}
+	return d
 }
 
 // assignmentView добавляет к назначению его индекс в исходном срезе Schedule.Assignments —
@@ -146,7 +167,7 @@ func (h *Handler) schedulesGroupsView(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	sched, err := h.svc.GetByID(r.Context(), id)
+	sched, err := h.svc.GetSchedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)
@@ -320,12 +341,12 @@ func buildDayGroups(sched *domain.Schedule, teachers []domain.Teacher) []dayGrou
 }
 
 func (h *Handler) loadSchedulesList(w http.ResponseWriter, r *http.Request, status int, errMsg string) {
-	list, err := h.svc.List(r.Context())
+	list, err := h.svc.ListSchedules(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	renderStatus(w, r, status, h.pages["schedules_list.html"], schedulesListData{Schedules: list, Error: errMsg})
+	renderStatus(w, r, status, h.pages["schedules_list.html"], h.withProblems(r, schedulesListData{Schedules: list, Error: errMsg}))
 }
 
 func (h *Handler) schedulesList(w http.ResponseWriter, r *http.Request) {
@@ -336,7 +357,7 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 	if !parseForm(w, r) {
 		return
 	}
-	in := app.GenerateInput{
+	in := app.GenerateCommand{
 		Name:           r.FormValue("name"),
 		SolverType:     r.FormValue("solver_type"),
 		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 30),
@@ -358,7 +379,7 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 			h.loadSchedulesList(w, r, http.StatusUnprocessableEntity, "Не удалось сгенерировать все методы: "+err.Error())
 			return
 		}
-		list, err := h.svc.List(r.Context())
+		list, err := h.svc.ListSchedules(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -371,19 +392,19 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 		}
 		successMsg := fmt.Sprintf("Сгенерировано %d расписаний (по методам). Лучший score: %d — сравните и выберите",
 			len(saved), bestScore)
-		renderStatus(w, r, http.StatusOK, h.pages["schedules_list.html"], schedulesListData{
+		renderStatus(w, r, http.StatusOK, h.pages["schedules_list.html"], h.withProblems(r, schedulesListData{
 			Schedules: list,
 			Success:   successMsg,
-		})
+		}))
 		return
 	}
 
-	sched, err := h.svc.Generate(r.Context(), in)
+	sched, err := h.svc.GenerateSchedule(r.Context(), in)
 	if err != nil {
 		h.loadSchedulesList(w, r, http.StatusUnprocessableEntity, "Не удалось сгенерировать расписание: "+err.Error())
 		return
 	}
-	list, err := h.svc.List(r.Context())
+	list, err := h.svc.ListSchedules(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -392,14 +413,14 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 	if n := len(sched.Unplaced); n > 0 {
 		successMsg += fmt.Sprintf(". Не удалось разместить: %d (см. детали в расписании)", n)
 	}
-	renderStatus(w, r, http.StatusOK, h.pages["schedules_list.html"], schedulesListData{
+	renderStatus(w, r, http.StatusOK, h.pages["schedules_list.html"], h.withProblems(r, schedulesListData{
 		Schedules: list,
 		Success:   successMsg,
-	})
+	}))
 }
 
 func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id int64, status int, errMsg, successMsg string) {
-	sched, err := h.svc.GetByID(r.Context(), id)
+	sched, err := h.svc.GetSchedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)
@@ -437,7 +458,7 @@ func (h *Handler) schedulesDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := h.svc.Delete(r.Context(), id); err != nil {
+	if err := h.svc.DeleteSchedule(r.Context(), id); err != nil {
 		h.loadSchedulesList(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -455,7 +476,7 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
-	sched, err := h.svc.GetByID(r.Context(), id)
+	sched, err := h.svc.GetSchedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			http.NotFound(w, r)
@@ -505,8 +526,8 @@ func conflictMessage(c *app.ConflictError) string {
 	return fmt.Sprintf("Конфликт: %s (конфликтует с занятием №%d)", what, c.ConflictWith)
 }
 
-func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id int64, idx int, req app.PatchRequest, status int, errMsg string) {
-	sched, err := h.svc.GetByID(r.Context(), id)
+func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id int64, idx int, cmd app.MoveAssignmentCommand, status int, errMsg string) {
+	sched, err := h.svc.GetSchedule(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -517,12 +538,12 @@ func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id in
 		return
 	}
 	a := sched.Assignments[idx]
-	a.TimeSlot = req.TimeSlot
-	if req.RoomID != "" {
-		a.RoomID = req.RoomID
+	a.TimeSlot = cmd.TimeSlot
+	if cmd.RoomID != "" {
+		a.RoomID = cmd.RoomID
 	}
-	if req.Parity != "" {
-		a.Parity = req.Parity
+	if cmd.Parity != "" {
+		a.Parity = cmd.Parity
 	}
 	renderStatus(w, r, status, h.pages["schedules_assignment_form.html"], assignmentFormData{
 		ScheduleID: id, Idx: idx, Assignment: a,
@@ -550,18 +571,20 @@ func (h *Handler) schedulesPatchAssignment(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	req := app.PatchRequest{
-		TimeSlot: ts,
-		RoomID:   r.FormValue("room_id"),
-		Parity:   domain.Parity(r.FormValue("parity")),
+	cmd := app.MoveAssignmentCommand{
+		ScheduleID: id,
+		Index:      idx,
+		TimeSlot:   ts,
+		RoomID:     r.FormValue("room_id"),
+		Parity:     domain.Parity(r.FormValue("parity")),
 	}
 
-	_, err = h.svc.PatchAssignment(r.Context(), id, idx, req)
+	_, err = h.svc.MoveAssignment(r.Context(), cmd)
 	if err != nil {
 		var conflict *app.ConflictError
 		switch {
 		case errors.As(err, &conflict):
-			h.reAssignmentForm(w, r, id, idx, req, http.StatusConflict, conflictMessage(conflict))
+			h.reAssignmentForm(w, r, id, idx, cmd, http.StatusConflict, conflictMessage(conflict))
 		case errors.Is(err, domain.ErrNotFound):
 			http.NotFound(w, r)
 		default:
@@ -608,7 +631,7 @@ func (h *Handler) schedulesPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pinned := r.FormValue("pinned") == "true"
-	if _, err := h.svc.SetPinned(r.Context(), id, idx, pinned); err != nil {
+	if _, err := h.svc.PinAssignment(r.Context(), app.PinAssignmentCommand{ScheduleID: id, Index: idx, Pinned: pinned}); err != nil {
 		h.loadScheduleView(w, r, id, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
@@ -630,7 +653,7 @@ func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
 	if !parseForm(w, r) {
 		return
 	}
-	base, err := h.svc.GetByID(r.Context(), id)
+	base, err := h.svc.GetSchedule(r.Context(), id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -638,7 +661,7 @@ func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
 	prefs := base.Options
 	construction := prefs.Construction
 	prefs.Construction = ""
-	sched, err := h.svc.Generate(r.Context(), app.GenerateInput{
+	sched, err := h.svc.GenerateSchedule(r.Context(), app.GenerateCommand{
 		Name:           base.Name + " — перегенерация",
 		SolverType:     construction,
 		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 120),

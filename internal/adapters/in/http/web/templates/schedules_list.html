@@ -4,6 +4,27 @@
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 {{if .Success}}<div class="banner success">{{.Success}}</div>{{end}}
 
+{{if .Problems}}
+<details class="card" style="margin-bottom:16px;" {{if .ProblemErrors}}open{{end}}>
+  <summary style="cursor:pointer; font-weight:600;">
+    Проверка данных: {{if .ProblemErrors}}<span class="score-bad">ошибок {{.ProblemErrors}}</span>{{else}}ошибок нет{{end}}, предупреждений {{.ProblemWarnings}}
+  </summary>
+  <div class="hint" style="margin:8px 0;">Ошибки — пары, которые точно не поставятся. Исправьте справочники или планы до генерации.</div>
+  <table>
+    <thead><tr><th></th><th>Что</th><th>Проблема</th></tr></thead>
+    <tbody>
+      {{range .Problems}}
+      <tr>
+        <td>{{if eq .Severity "error"}}<span class="score-bad">ошибка</span>{{else}}<span class="muted">предупреждение</span>{{end}}</td>
+        <td>{{.Object}}</td>
+        <td>{{.Message}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</details>
+{{end}}
+
 <div class="card" style="margin-bottom:24px;">
   <h2>Сгенерировать новое расписание</h2>
   <form hx-post="/ui/schedules/generate" hx-target="#main" hx-pending-text="Генерируется расписание…">
@@ -31,8 +52,8 @@
       <div class="field">
         <label>Построение</label>
         <select name="solver_type">
+          <option value="dsatur">Самая трудная пара первой (DSatur, рекомендуется)</option>
           <option value="teacher">По преподавателям</option>
-          <option value="dsatur">Самая трудная пара первой (DSatur)</option>
         </select>
         <div class="hint">Как расставляется начальное расписание до улучшения. См. «Справка».</div>
       </div>

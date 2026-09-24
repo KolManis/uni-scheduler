@@ -14,12 +14,13 @@ import (
 
 // scheduleService — интерфейс для работы с расписаниями.
 type scheduleService interface {
-	Generate(ctx context.Context, in app.GenerateInput) (*domain.Schedule, error)
-	GetByID(ctx context.Context, id int64) (*domain.Schedule, error)
-	List(ctx context.Context) ([]domain.ScheduleSummary, error)
-	Delete(ctx context.Context, id int64) error
-	PatchAssignment(ctx context.Context, schedID int64, idx int, req app.PatchRequest) (*domain.Schedule, error)
-	SetPinned(ctx context.Context, schedID int64, idx int, pinned bool) (*domain.Schedule, error)
+	GenerateSchedule(ctx context.Context, cmd app.GenerateCommand) (*domain.Schedule, error)
+	GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error)
+	ListSchedules(ctx context.Context) ([]domain.ScheduleSummary, error)
+	DeleteSchedule(ctx context.Context, id int64) error
+	MoveAssignment(ctx context.Context, cmd app.MoveAssignmentCommand) (*domain.Schedule, error)
+	PinAssignment(ctx context.Context, cmd app.PinAssignmentCommand) (*domain.Schedule, error)
+	CheckInput(ctx context.Context) ([]app.InputProblem, error)
 	MoveOptions(ctx context.Context, schedID int64, idx int) ([]app.MoveOption, error)
 	ImportExcel(ctx context.Context, data *domain.ImportedData) (*domain.ImportResult, error)
 }
@@ -41,7 +42,7 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.Generate(r.Context(), app.GenerateInput{
+	result, err := h.svc.GenerateSchedule(r.Context(), app.GenerateCommand{
 		Name:           req.Name,
 		MaxIterations:  req.MaxIterations,
 		SolverType:     req.SolverType,
@@ -76,7 +77,7 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/schedules
 func (h *ScheduleHandler) List(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.List(r.Context())
+	list, err := h.svc.ListSchedules(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -96,7 +97,7 @@ func (h *ScheduleHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.GetByID(r.Context(), id)
+	result, err := h.svc.GetSchedule(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "schedule not found")
@@ -118,7 +119,7 @@ func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Delete(r.Context(), id); err != nil {
+	if err := h.svc.DeleteSchedule(r.Context(), id); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "schedule not found")
 			return
@@ -151,10 +152,12 @@ func (h *ScheduleHandler) PatchAssignment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	updated, err := h.svc.PatchAssignment(r.Context(), id, idx, app.PatchRequest{
-		TimeSlot: req.TimeSlot,
-		RoomID:   req.RoomID,
-		Parity:   domain.Parity(req.Parity),
+	updated, err := h.svc.MoveAssignment(r.Context(), app.MoveAssignmentCommand{
+		ScheduleID: id,
+		Index:      idx,
+		TimeSlot:   req.TimeSlot,
+		RoomID:     req.RoomID,
+		Parity:     domain.Parity(req.Parity),
 	})
 	if err != nil {
 		var conflict *app.ConflictError
@@ -225,13 +228,27 @@ func (h *ScheduleHandler) SetPinned(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-	updated, err := h.svc.SetPinned(r.Context(), id, idx, req.Pinned)
+	updated, err := h.svc.PinAssignment(r.Context(), app.PinAssignmentCommand{ScheduleID: id, Index: idx, Pinned: req.Pinned})
 	if err != nil {
 		h.writeServiceError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(updated)
+}
+
+// GET /api/v1/input/check — ошибки в справочниках и планах до генерации.
+func (h *ScheduleHandler) CheckInput(w http.ResponseWriter, r *http.Request) {
+	problems, err := h.svc.CheckInput(r.Context())
+	if err != nil {
+		h.writeServiceError(w, err)
+		return
+	}
+	if problems == nil {
+		problems = []app.InputProblem{} // [] вместо null
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(problems)
 }
 
 // --- helpers ---

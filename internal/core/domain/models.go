@@ -83,6 +83,8 @@ type UnplacedItem struct {
 	SubjectID    string    `json:"subject_id"`
 	Type         ClassType `json:"type"`
 	MissingHours int       `json:"missing_hours"`
+	// Reason — почему не поставлена, человеческими словами (считается после генерации).
+	Reason string `json:"reason,omitempty"`
 }
 
 type Schedule struct {
