@@ -105,6 +105,10 @@ th { background: var(--bg); font-weight: 600; }
 tr:last-child td { border-bottom: none; }
 
 .actions { white-space: nowrap; display: flex; gap: 6px; }
+/* В таблице .actions — обычная ячейка: с display:flex она не растягивается по высоте
+   строки, и её нижняя граница не совпадает с соседними ячейками. */
+td.actions { display: table-cell; }
+td.actions > * + * { margin-left: 6px; }
 
 .card {
   background: var(--card);
