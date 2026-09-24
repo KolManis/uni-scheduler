@@ -104,23 +104,16 @@ func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.I
 		info:  make([]asgInfo, len(assignments)),
 		slot:  make([]int, len(assignments)),
 	}
-	isPending := func(i int) bool { return i >= len(placed) }
+	// Пары с номером от len(placed) и дальше — снятые (pending).
 
 	teacherIdx := map[string]int{}
 	groupIdx := map[string]int{}
 	roomIdx := map[string]int{}
-	idx := func(m map[string]int, id string) int {
-		if i, ok := m[id]; ok {
-			return i
-		}
-		m[id] = len(m)
-		return m[id]
-	}
 
 	roomByID := make(map[string]domain.Room, len(input.Rooms))
 	for _, r := range input.Rooms {
 		roomByID[r.ID] = r
-		idx(roomIdx, r.ID)
+		indexOf(roomIdx, r.ID)
 	}
 	planByID := make(map[string]domain.SubjectPlan, len(input.SubjectPlans))
 	for _, sp := range input.SubjectPlans {
@@ -137,14 +130,14 @@ func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.I
 
 	for i, a := range e.asg {
 		inf := &e.info[i]
-		inf.teacher = idx(teacherIdx, a.TeacherID)
+		inf.teacher = indexOf(teacherIdx, a.TeacherID)
 		for _, gid := range a.GroupIDs {
-			inf.groups = append(inf.groups, idx(groupIdx, gid))
+			inf.groups = append(inf.groups, indexOf(groupIdx, gid))
 		}
-		inf.room = idx(roomIdx, a.RoomID)
+		inf.room = indexOf(roomIdx, a.RoomID)
 		inf.weeks = [2]bool{inWeek(a.Parity, domain.Even), inWeek(a.Parity, domain.Odd)}
 		e.slot[i] = slotIndex(a.TimeSlot)
-		if isPending(i) {
+		if i >= len(placed) {
 			e.slot[i] = unplacedSlot
 		}
 	}
@@ -202,7 +195,7 @@ func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.I
 		for _, c := range cands {
 			e.info[i].cands = append(e.info[i].cands, c.room)
 		}
-		if isPending(i) && len(cands) > 0 {
+		if i >= len(placed) && len(cands) > 0 {
 			e.info[i].room = cands[0].room
 			e.asg[i].RoomID = e.roomIDs[cands[0].room]
 			e.asg[i].BuildingID = e.rooms[cands[0].room].building
@@ -572,4 +565,13 @@ func (e *evaluator) groupPref(members []int) prefPenalties {
 		}
 	}
 	return p
+}
+
+// indexOf — номер идентификатора id в m; новый id получает следующий свободный номер.
+func indexOf(m map[string]int, id string) int {
+	if i, ok := m[id]; ok {
+		return i
+	}
+	m[id] = len(m)
+	return m[id]
 }

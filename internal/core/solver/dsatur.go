@@ -23,16 +23,55 @@ import (
 // по преподавателям (placePair), поэтому качество дня оценивается одинаково.
 //
 // Ненулевой rng перемешивает пары с полностью равным приоритетом (многостартовый поиск).
-func constructDSatur(state *teacherState, rng *rand.Rand) {
-	var tasks []placementTask
-	for _, t := range state.input.Teachers {
-		tasks = append(tasks, collectRemaining(state, state.input, t)...)
+func constructDSatur(draft *scheduleDraft, rng *rand.Rand) {
+	queue := newDSaturQueue(draft, rng)
+	for !queue.empty() {
+		task := queue.popHardest()
+		if slot, ok := placeTask(draft, task); ok {
+			queue.slotTaken(draft, slot)
+		}
 	}
-	if len(tasks) == 0 {
-		return
-	}
+}
 
-	// Степень вершины: сколько других пар делят преподавателя или хотя бы одну группу.
+// dsaturQueue — непоставленные пары и то, по чему выбирается самая трудная.
+type dsaturQueue struct {
+	tasks     []placementTask
+	remaining []int            // номера ещё не поставленных пар в tasks
+	feasible  [][numSlots]bool // feasible[k][s] — слот s ещё допустим для пары k
+	free      []int            // сколько допустимых слотов осталось у пары
+	degree    []int            // сколько других пар делят с ней преподавателя или группу
+	tie       []int            // порядок при полном равенстве (перемешивается зерном)
+}
+
+func newDSaturQueue(draft *scheduleDraft, rng *rand.Rand) *dsaturQueue {
+	q := &dsaturQueue{}
+	for _, t := range draft.input.Teachers {
+		q.tasks = append(q.tasks, collectRemaining(draft, draft.input, t)...)
+	}
+	n := len(q.tasks)
+	q.remaining = make([]int, n)
+	q.feasible = make([][numSlots]bool, n)
+	q.free = make([]int, n)
+	q.degree = taskDegrees(q.tasks)
+	q.tie = make([]int, n)
+	for k := range q.tasks {
+		q.remaining[k] = k
+		q.tie[k] = k
+		for s := 0; s < numSlots; s++ {
+			if slotFeasible(draft, q.tasks[k], slotFromIndex(s)) {
+				q.feasible[k][s] = true
+				q.free[k]++
+			}
+		}
+	}
+	if rng != nil {
+		rng.Shuffle(n, func(a, b int) { q.tie[a], q.tie[b] = q.tie[b], q.tie[a] })
+	}
+	return q
+}
+
+// taskDegrees — степень вершины: сколько других пар делят преподавателя или хотя бы одну группу.
+func taskDegrees(tasks []placementTask) []int {
 	byTeacher := map[string]int{}
 	byGroup := map[string]int{}
 	for _, t := range tasks {
@@ -42,98 +81,81 @@ func constructDSatur(state *teacherState, rng *rand.Rand) {
 		}
 	}
 	degree := make([]int, len(tasks))
-	tie := make([]int, len(tasks))
 	for k, t := range tasks {
-		d := byTeacher[t.teacher.ID] - 1
+		degree[k] = byTeacher[t.teacher.ID] - 1
 		for _, g := range t.subject.GroupIDs {
-			d += byGroup[g] - 1
+			degree[k] += byGroup[g] - 1
 		}
-		degree[k] = d
-		tie[k] = k
 	}
-	if rng != nil {
-		rng.Shuffle(len(tie), func(a, b int) { tie[a], tie[b] = tie[b], tie[a] })
-	}
+	return degree
+}
 
-	// feasible[k][s] — слот s ещё допустим для пары k. Постановка пары меняет занятость
-	// только в своём слоте, поэтому после неё перепроверяется один слот у всех пар.
-	feasible := make([][numSlots]bool, len(tasks))
-	count := make([]int, len(tasks))
-	for k := range tasks {
-		for s := 0; s < numSlots; s++ {
-			if slotFeasible(state, tasks[k], slotFromIndex(s)) {
-				feasible[k][s] = true
-				count[k]++
-			}
+func (q *dsaturQueue) empty() bool { return len(q.remaining) == 0 }
+
+// popHardest достаёт из очереди самую трудную пару.
+func (q *dsaturQueue) popHardest() placementTask {
+	pick := 0
+	for x := 1; x < len(q.remaining); x++ {
+		if q.harder(q.remaining[x], q.remaining[pick]) {
+			pick = x
 		}
 	}
+	k := q.remaining[pick]
+	q.remaining = append(q.remaining[:pick], q.remaining[pick+1:]...)
+	return q.tasks[k]
+}
 
-	classRank := map[domain.ClassType]int{domain.Lecture: 0, domain.Practice: 1, domain.Lab: 2}
-	harder := func(a, b int) bool {
-		if count[a] != count[b] {
-			return count[a] < count[b]
-		}
-		ga, gb := len(tasks[a].subject.GroupIDs), len(tasks[b].subject.GroupIDs)
-		if ga != gb {
-			return ga > gb
-		}
-		if degree[a] != degree[b] {
-			return degree[a] > degree[b]
-		}
-		if ra, rb := classRank[tasks[a].classType], classRank[tasks[b].classType]; ra != rb {
-			return ra < rb
-		}
-		return tie[a] < tie[b]
+// classRank — при прочем равенстве лекции раньше практик, практики раньше лабораторных.
+var classRank = map[domain.ClassType]int{domain.Lecture: 0, domain.Practice: 1, domain.Lab: 2}
+
+// harder — пара a трудней пары b: меньше свободных слотов, затем больше групп, затем
+// больше степень, затем лекция раньше практики, затем случайный порядок tie.
+func (q *dsaturQueue) harder(a, b int) bool {
+	if q.free[a] != q.free[b] {
+		return q.free[a] < q.free[b]
 	}
-
-	remaining := make([]int, len(tasks))
-	for k := range remaining {
-		remaining[k] = k
+	ga, gb := len(q.tasks[a].subject.GroupIDs), len(q.tasks[b].subject.GroupIDs)
+	if ga != gb {
+		return ga > gb
 	}
-	for len(remaining) > 0 {
-		pick := 0
-		for x := 1; x < len(remaining); x++ {
-			if harder(remaining[x], remaining[pick]) {
-				pick = x
-			}
-		}
-		k := remaining[pick]
-		remaining = append(remaining[:pick], remaining[pick+1:]...)
+	if q.degree[a] != q.degree[b] {
+		return q.degree[a] > q.degree[b]
+	}
+	if ra, rb := classRank[q.tasks[a].classType], classRank[q.tasks[b].classType]; ra != rb {
+		return ra < rb
+	}
+	return q.tie[a] < q.tie[b]
+}
 
-		task := tasks[k]
-		before := len(state.assignments)
-		placeTask(state, task)
-		if len(state.assignments) == before {
-			continue
-		}
-		slot := state.assignments[len(state.assignments)-1].TimeSlot
-		s := slotIndex(slot)
-		for _, other := range remaining {
-			if feasible[other][s] && !slotFeasible(state, tasks[other], slot) {
-				feasible[other][s] = false
-				count[other]--
-			}
+// slotTaken — в slot поставлена пара: у остальных пар этот слот мог стать недопустимым.
+// Постановка меняет занятость только в своём слоте, поэтому перепроверяется только он.
+func (q *dsaturQueue) slotTaken(draft *scheduleDraft, slot domain.TimeSlot) {
+	s := slotIndex(slot)
+	for _, k := range q.remaining {
+		if q.feasible[k][s] && !slotFeasible(draft, q.tasks[k], slot) {
+			q.feasible[k][s] = false
+			q.free[k]--
 		}
 	}
 }
 
 // slotFeasible — можно ли сейчас поставить пару task в slot: преподаватель доступен и
 // свободен, свободны все группы и есть свободная подходящая аудитория.
-func slotFeasible(state *teacherState, task placementTask, slot domain.TimeSlot) bool {
+func slotFeasible(draft *scheduleDraft, task placementTask, slot domain.TimeSlot) bool {
 	if !isTeacherAvailable(slot, task.teacher) ||
-		!isSlotFree(slot, task.teacher.ID, task.parity, state.occupiedTeachers) ||
-		!isSlotFreeForAllGroups(slot, task.subject.GroupIDs, task.parity, state.occupiedGroups) {
+		!isSlotFree(slot, task.teacher.ID, task.parity, draft.occupiedTeachers) ||
+		!isSlotFreeForAllGroups(slot, task.subject.GroupIDs, task.parity, draft.occupiedGroups) {
 		return false
 	}
-	for _, room := range state.input.Rooms {
+	for _, room := range draft.input.Rooms {
 		if !isRoomSuitable(room, task.subject.RequiresRoomType) ||
-			!isSlotFree(slot, room.ID, task.parity, state.occupiedRooms) {
+			!isSlotFree(slot, room.ID, task.parity, draft.occupiedRooms) {
 			continue
 		}
-		if ok, _ := isRoomBigEnoughWithOverflow(room, task.subject.GroupIDs, state.groupMap); !ok {
+		if ok, _ := isRoomBigEnoughWithOverflow(room, task.subject.GroupIDs, draft.groupMap); !ok {
 			continue
 		}
-		if isRoomValidForSubject(room, task.subject, task.subject.GroupIDs, state.groupMap, task.teacher) {
+		if isRoomValidForSubject(room, task.subject, task.subject.GroupIDs, draft.groupMap, task.teacher) {
 			return true
 		}
 	}

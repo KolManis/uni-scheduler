@@ -17,18 +17,8 @@ func CalculateQuality(assignments []domain.Assignment) domain.WeekQuality {
 
 // weekQuality — показатели одной недели; на вход только её пары.
 func weekQuality(assignments []domain.Assignment) domain.QualityStats {
-	type dayKey struct {
-		id  string
-		day domain.Day
-	}
-	groupPairs := make(map[dayKey]map[int]bool)
-	teacherPairs := make(map[dayKey]map[int]bool)
-	addPair := func(m map[dayKey]map[int]bool, k dayKey, pair int) {
-		if m[k] == nil {
-			m[k] = make(map[int]bool)
-		}
-		m[k][pair] = true
-	}
+	groupPairs := make(map[dayKey]map[int]bool)   // группа и день → номера пар
+	teacherPairs := make(map[dayKey]map[int]bool) // преподаватель и день → номера пар
 
 	var stats domain.QualityStats
 	saturdaySlots := make(map[domain.TimeSlot]map[string]bool)
@@ -78,4 +68,18 @@ func sortedPairs(pairs map[int]bool) []int {
 	}
 	sort.Ints(nums)
 	return nums
+}
+
+// dayKey — день группы или преподавателя.
+type dayKey struct {
+	id  string
+	day domain.Day
+}
+
+// addPair отмечает пару pair в дне key.
+func addPair(days map[dayKey]map[int]bool, key dayKey, pair int) {
+	if days[key] == nil {
+		days[key] = make(map[int]bool)
+	}
+	days[key][pair] = true
 }

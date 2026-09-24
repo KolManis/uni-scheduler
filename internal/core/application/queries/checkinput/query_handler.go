@@ -54,36 +54,33 @@ func checkPlans(data domain.InputData) []Problem {
 	var out []Problem
 	for _, sp := range data.SubjectPlans {
 		object := fmt.Sprintf("План «%s»", sp.Name)
-		add := func(severity, msg string) {
-			out = append(out, Problem{Severity: severity, Object: object, Message: msg})
-		}
 
 		if rules.FindTeacher(data.Teachers, sp.TeacherID) == nil {
-			add(ProblemError, "преподаватель не найден в справочнике")
+			out = append(out, Problem{Object: object, Severity: ProblemError, Message: "преподаватель не найден в справочнике"})
 			continue
 		}
 		if len(sp.GroupIDs) == 0 {
-			add(ProblemError, "не указаны группы")
+			out = append(out, Problem{Object: object, Severity: ProblemError, Message: "не указаны группы"})
 			continue
 		}
 		if g := rules.MissingGroup(sp.GroupIDs, data.Groups); g != "" {
-			add(ProblemError, "группа "+g+" не найдена в справочнике")
+			out = append(out, Problem{Object: object, Severity: ProblemError, Message: "группа " + g + " не найдена в справочнике"})
 			continue
 		}
 		if sp.LectureHours+sp.PracticeHours+sp.LabHours == 0 {
-			add(ProblemWarning, "нет часов — в расписание не попадёт")
+			out = append(out, Problem{Object: object, Severity: ProblemWarning, Message: "нет часов — в расписание не попадёт"})
 			continue
 		}
 		for _, h := range []int{sp.LectureHours, sp.PracticeHours, sp.LabHours} {
 			if h%2 == 1 {
-				add(ProblemWarning, fmt.Sprintf("нечётное число часов (%d) — будет округлено вверх до целых пар", h))
+				out = append(out, Problem{Object: object, Severity: ProblemWarning, Message: fmt.Sprintf("нечётное число часов (%d) — будет округлено вверх до целых пар", h)})
 				break
 			}
 		}
 		pair := domain.Assignment{SubjectID: sp.ID, TeacherID: sp.TeacherID, GroupIDs: sp.GroupIDs}
 		if len(solver.SuitableRooms(pair, data)) == 0 {
-			add(ProblemError, fmt.Sprintf("нет аудитории типа «%s» на %d мест в допустимых корпусах",
-				sp.RequiresRoomType, rules.StudentCount(sp.GroupIDs, data.Groups)))
+			out = append(out, Problem{Object: object, Severity: ProblemError, Message: fmt.Sprintf("нет аудитории типа «%s» на %d мест в допустимых корпусах",
+				sp.RequiresRoomType, rules.StudentCount(sp.GroupIDs, data.Groups))})
 		}
 	}
 	return out

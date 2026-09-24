@@ -92,7 +92,7 @@ func TestPlacePair_KeepsGroupsTogether(t *testing.T) {
 			{ID: "R1", Number: "101", BuildingID: "A", Capacity: 30, Type: "lecture"},
 		},
 	}
-	state := newTeacherState(input)
+	draft := newDraft(input)
 	teacher := domain.Teacher{ID: "T1", MaxWeeklyHours: 20}
 	subject := domain.SubjectPlan{
 		ID: "SP1", TeacherID: "T1", GroupIDs: []string{"G1", "G2"},
@@ -107,24 +107,24 @@ func TestPlacePair_KeepsGroupsTogether(t *testing.T) {
 	for _, day := range domain.AllDays {
 		for pair := 1; pair <= 6; pair++ {
 			slot := domain.MustNewTimeSlot(day, pair)
-			if state.occupiedGroups[slot] == nil {
-				state.occupiedGroups[slot] = make(map[string]domain.Parity)
+			if draft.occupiedGroups[slot] == nil {
+				draft.occupiedGroups[slot] = make(map[string]domain.Parity)
 			}
 			if slot != freeSlotG1 {
-				state.occupiedGroups[slot]["G1"] = domain.Always
+				draft.occupiedGroups[slot]["G1"] = domain.Always
 			}
 			if slot != freeSlotG2 {
-				state.occupiedGroups[slot]["G2"] = domain.Always
+				draft.occupiedGroups[slot]["G2"] = domain.Always
 			}
 		}
 	}
 
-	ok := placePair(state, placementTask{teacher: teacher, subject: subject, classType: domain.Practice, parity: domain.Always})
+	_, ok := placePair(draft, placementTask{teacher: teacher, subject: subject, classType: domain.Practice, parity: domain.Always})
 	if ok {
 		t.Fatal("expected placement to fail: no common slot on all groups, splitting is not allowed")
 	}
-	if len(state.assignments) != 0 {
-		t.Fatalf("expected 0 assignments (subject should stay unplaced), got %d: %+v", len(state.assignments), state.assignments)
+	if len(draft.assignments) != 0 {
+		t.Fatalf("expected 0 assignments (subject should stay unplaced), got %d: %+v", len(draft.assignments), draft.assignments)
 	}
 }
 
@@ -148,8 +148,8 @@ func TestSlotPenalty_PrefersDayWithSinglePair(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state := newTeacherState(domain.InputData{})
-			state.assignments = []domain.Assignment{
+			draft := newDraft(domain.InputData{})
+			draft.assignments = []domain.Assignment{
 				{
 					GroupIDs:  []string{"G1"},
 					TeacherID: "T1",
@@ -163,8 +163,8 @@ func TestSlotPenalty_PrefersDayWithSinglePair(t *testing.T) {
 				GroupIDs:  []string{"G1"},
 			}
 
-			sameDay := slotPenalty(state, tt.sameDay, subject, domain.Practice, domain.Always, subject.GroupIDs, "T2")
-			newDay := slotPenalty(state, tt.newDay, subject, domain.Practice, domain.Always, subject.GroupIDs, "T2")
+			sameDay := slotPenalty(draft, tt.sameDay, subject, domain.Practice, domain.Always, subject.GroupIDs, "T2")
+			newDay := slotPenalty(draft, tt.newDay, subject, domain.Practice, domain.Always, subject.GroupIDs, "T2")
 			if sameDay >= newDay {
 				t.Errorf("штраф за день с парой (%d) должен быть меньше, чем за новый день (%d)", sameDay, newDay)
 			}
@@ -192,8 +192,8 @@ func TestSlotPenalty_BlinkingPairFillsOtherWeekGap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state := newTeacherState(domain.InputData{})
-			state.assignments = []domain.Assignment{
+			draft := newDraft(domain.InputData{})
+			draft.assignments = []domain.Assignment{
 				{
 					GroupIDs:  []string{"G1"},
 					TeacherID: "T1",
@@ -219,8 +219,8 @@ func TestSlotPenalty_BlinkingPairFillsOtherWeekGap(t *testing.T) {
 				GroupIDs:  []string{"G1"},
 			}
 
-			inGap := slotPenalty(state, tt.gapSlot, subject, domain.Practice, domain.Even, subject.GroupIDs, "T4")
-			elsewhere := slotPenalty(state, tt.otherDay, subject, domain.Practice, domain.Even, subject.GroupIDs, "T4")
+			inGap := slotPenalty(draft, tt.gapSlot, subject, domain.Practice, domain.Even, subject.GroupIDs, "T4")
+			elsewhere := slotPenalty(draft, tt.otherDay, subject, domain.Practice, domain.Even, subject.GroupIDs, "T4")
 			if inGap >= elsewhere {
 				t.Errorf("штраф в окне чётной недели (%d) должен быть меньше, чем в пустом дне (%d)", inGap, elsewhere)
 			}

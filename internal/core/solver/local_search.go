@@ -26,28 +26,30 @@ const (
 type teacherUnavailable map[string]map[domain.TimeSlot]domain.Parity
 
 func buildTeacherUnavailable(input domain.InputData) teacherUnavailable {
-	var m teacherUnavailable
-	add := func(tid string, s domain.TimeSlot, p domain.Parity) {
-		if m == nil {
-			m = make(teacherUnavailable)
-		}
-		if m[tid] == nil {
-			m[tid] = make(map[domain.TimeSlot]domain.Parity)
-		}
-		if p == "" {
-			p = domain.Always
-		}
-		m[tid][s] = mergeParity(m[tid][s], p)
-	}
+	m := teacherUnavailable{}
 	for _, t := range input.Teachers {
 		for _, s := range t.UnavailableSlots {
-			add(t.ID, s, domain.Always)
+			m.add(t.ID, s, domain.Always)
 		}
 		for _, ep := range t.ExternalPairs {
-			add(t.ID, ep.TimeSlot, ep.Parity)
+			m.add(t.ID, ep.TimeSlot, ep.Parity)
 		}
 	}
+	if len(m) == 0 {
+		return nil // ограничений нет — проверка ничего не стоит
+	}
 	return m
+}
+
+// add отмечает, что преподаватель занят в slot в недели parity (пусто — каждую неделю).
+func (m teacherUnavailable) add(teacherID string, slot domain.TimeSlot, parity domain.Parity) {
+	if m[teacherID] == nil {
+		m[teacherID] = make(map[domain.TimeSlot]domain.Parity)
+	}
+	if parity == "" {
+		parity = domain.Always
+	}
+	m[teacherID][slot] = mergeParity(m[teacherID][slot], parity)
 }
 
 // paritiesOverlap — идут ли пары с чётностями a и b хотя бы в одну общую неделю.
@@ -360,40 +362,12 @@ func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData
 //
 // unavail может быть nil — тогда ограничений по доступности нет и проверка бесплатна.
 func checkHardConstraints(assignments []domain.Assignment, unavail teacherUnavailable) bool {
-	type key struct {
-		slot   domain.TimeSlot
-		id     string
-		entity string // "teacher" | "group" | "room"
+	// busy — в какие недели ресурс уже занят в слоте. Ресурс — "teacher:…", "group:…", "room:…".
+	type resourceSlot struct {
+		resource string
+		slot     domain.TimeSlot
 	}
-
-	type paritySet struct {
-		even, odd, always bool
-	}
-
-	occupied := make(map[key]*paritySet)
-
-	conflicts := func(ps *paritySet, p domain.Parity) bool {
-		switch p {
-		case domain.Always:
-			return ps.even || ps.odd || ps.always
-		case domain.Even:
-			return ps.always || ps.even
-		case domain.Odd:
-			return ps.always || ps.odd
-		}
-		return false
-	}
-
-	add := func(ps *paritySet, p domain.Parity) {
-		switch p {
-		case domain.Always:
-			ps.always = true
-		case domain.Even:
-			ps.even = true
-		case domain.Odd:
-			ps.odd = true
-		}
-	}
+	busy := make(map[resourceSlot]domain.Parity)
 
 	for _, a := range assignments {
 		parity := a.Parity
@@ -401,44 +375,23 @@ func checkHardConstraints(assignments []domain.Assignment, unavail teacherUnavai
 			parity = domain.Always
 		}
 
-		// HC7: слот не должен быть отмечен преподавателем как недоступный
-		if len(unavail) > 0 {
-			if busy, ok := unavail[a.TeacherID][a.TimeSlot]; ok && paritiesOverlap(busy, parity) {
-				return false
-			}
-		}
-
-		// HC1: преподаватель
-		tk := key{slot: a.TimeSlot, id: a.TeacherID, entity: "teacher"}
-		if ps, ok := occupied[tk]; ok && conflicts(ps, parity) {
+		// HC7: преподаватель не отметил слот недоступным и не ведёт в это время пару на другом факультете.
+		if p, ok := unavail[a.TeacherID][a.TimeSlot]; ok && paritiesOverlap(p, parity) {
 			return false
 		}
-		if occupied[tk] == nil {
-			occupied[tk] = &paritySet{}
-		}
-		add(occupied[tk], parity)
 
-		// HC2: группы
+		// HC1–HC3: преподаватель, каждая группа и аудитория не заняты в этот слот в ту же неделю.
+		resources := []string{"teacher:" + a.TeacherID, "room:" + a.RoomID}
 		for _, gid := range a.GroupIDs {
-			gk := key{slot: a.TimeSlot, id: gid, entity: "group"}
-			if ps, ok := occupied[gk]; ok && conflicts(ps, parity) {
+			resources = append(resources, "group:"+gid)
+		}
+		for _, r := range resources {
+			k := resourceSlot{r, a.TimeSlot}
+			if p, ok := busy[k]; ok && paritiesOverlap(p, parity) {
 				return false
 			}
-			if occupied[gk] == nil {
-				occupied[gk] = &paritySet{}
-			}
-			add(occupied[gk], parity)
+			busy[k] = mergeParity(busy[k], parity)
 		}
-
-		// HC3: аудитория
-		rk := key{slot: a.TimeSlot, id: a.RoomID, entity: "room"}
-		if ps, ok := occupied[rk]; ok && conflicts(ps, parity) {
-			return false
-		}
-		if occupied[rk] == nil {
-			occupied[rk] = &paritySet{}
-		}
-		add(occupied[rk], parity)
 	}
 	return true
 }

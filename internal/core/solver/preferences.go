@@ -139,15 +139,15 @@ func earliest(slots []domain.TimeSlot) int {
 
 // preferenceSlotPenalty — те же правила при построении: насколько слот нежелателен
 // для очередной пары с учётом уже поставленных.
-func preferenceSlotPenalty(state *teacherState, subject domain.SubjectPlan, classType domain.ClassType,
+func preferenceSlotPenalty(draft *scheduleDraft, subject domain.SubjectPlan, classType domain.ClassType,
 	slot domain.TimeSlot, groupIDs []string) int {
 
-	prefs := state.input.Preferences
+	prefs := draft.input.Preferences
 	penalty := 0
 
 	if prefs.SameSubjectSameDay && classType != domain.Lecture {
 		sameDay, otherDay := false, false
-		for _, a := range state.assignments {
+		for _, a := range draft.assignments {
 			if a.SubjectID != subject.ID || a.Type != classType {
 				continue
 			}
@@ -167,10 +167,10 @@ func preferenceSlotPenalty(state *teacherState, subject domain.SubjectPlan, clas
 	}
 
 	// Уже поставленные занятия того же предмета у тех же групп.
-	key := state.planKeys[subject.ID]
+	key := draft.planKeys[subject.ID]
 	var lectures, practices []domain.TimeSlot
-	for _, a := range state.assignments {
-		if state.planKeys[a.SubjectID] != key || !sharesGroup(a.GroupIDs, groupIDs) {
+	for _, a := range draft.assignments {
+		if draft.planKeys[a.SubjectID] != key || !sharesGroup(a.GroupIDs, groupIDs) {
 			continue
 		}
 		if a.Type == domain.Lecture {

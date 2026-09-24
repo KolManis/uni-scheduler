@@ -81,12 +81,6 @@ func weekBreakdown(assignments []domain.Assignment, input domain.InputData) doma
 
 	groups := map[string]*week{}
 	teachers := map[string]*week{}
-	weekOf := func(m map[string]*week, id string) *week {
-		if m[id] == nil {
-			m[id] = &week{}
-		}
-		return m[id]
-	}
 
 	var b domain.FitnessBreakdown
 	for _, a := range assignments {
@@ -96,9 +90,9 @@ func weekBreakdown(assignments []domain.Assignment, input domain.InputData) doma
 			building = "" // спортзал и стадион не участвуют в переходах между корпусами
 		}
 		for _, gid := range a.GroupIDs {
-			weekOf(groups, gid).add(slot, building)
+			weekFor(groups, gid).add(slot, building)
 		}
-		weekOf(teachers, a.TeacherID).add(slot, "")
+		weekFor(teachers, a.TeacherID).add(slot, "")
 		if a.TimeSlot.Day() == domain.Saturday {
 			b.Saturday += saturdayPairPenalty
 		}
@@ -111,4 +105,12 @@ func weekBreakdown(assignments []domain.Assignment, input domain.InputData) doma
 		addBreakdown(&b, teacherPenalties(w), 1)
 	}
 	return b
+}
+
+// weekFor — неделя группы или преподавателя id; создаётся пустой при первом обращении.
+func weekFor(weeks map[string]*week, id string) *week {
+	if weeks[id] == nil {
+		weeks[id] = &week{}
+	}
+	return weeks[id]
 }

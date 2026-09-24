@@ -277,15 +277,19 @@ func shortConflict(c *rules.ConflictError) string {
 // moveEffects — что изменит перенос, человеческими словами: «−1 окно, +1 день с одной парой».
 func moveEffects(o moveoptions.Option, currentRoom string) string {
 	var parts []string
-	add := func(n int, what string) {
-		if n != 0 {
-			parts = append(parts, fmt.Sprintf("%+d %s", n, what))
+	for _, e := range []struct {
+		delta int
+		what  string
+	}{
+		{o.LongGapsDelta, "окно 2+"},
+		{o.GapsDelta, "окна"},
+		{o.SingleDaysDelta, "дн. с 1 парой"},
+		{o.SaturdayDelta, "суббота"},
+	} {
+		if e.delta != 0 {
+			parts = append(parts, fmt.Sprintf("%+d %s", e.delta, e.what))
 		}
 	}
-	add(o.LongGapsDelta, "окно 2+")
-	add(o.GapsDelta, "окна")
-	add(o.SingleDaysDelta, "дн. с 1 парой")
-	add(o.SaturdayDelta, "суббота")
 	if o.RoomID != currentRoom {
 		parts = append(parts, "другая ауд.")
 	}
@@ -295,26 +299,13 @@ func moveEffects(o moveoptions.Option, currentRoom string) string {
 // buildDayGroups — пары расписания по дням и номерам пар. Пары на других факультетах
 // показываются у преподавателей, которые ведут занятия в этом расписании.
 func buildDayGroups(sched *domain.Schedule, teachers []domain.Teacher) []dayGroup {
-	type cell struct {
-		items    []assignmentView
-		external []externalView
-	}
-	byDay := map[domain.Day]map[int]*cell{}
-	at := func(slot domain.TimeSlot) *cell {
-		if byDay[slot.Day()] == nil {
-			byDay[slot.Day()] = map[int]*cell{}
-		}
-		c := byDay[slot.Day()][slot.PairNum()]
-		if c == nil {
-			c = &cell{}
-			byDay[slot.Day()][slot.PairNum()] = c
-		}
-		return c
-	}
+	// Что стоит в каждом слоте: пары расписания и пары преподавателей на других факультетах.
+	items := map[domain.TimeSlot][]assignmentView{}
+	external := map[domain.TimeSlot][]externalView{}
+
 	inSchedule := map[string]bool{}
 	for idx, a := range sched.Assignments {
-		c := at(a.TimeSlot)
-		c.items = append(c.items, assignmentView{Idx: idx, Assignment: a})
+		items[a.TimeSlot] = append(items[a.TimeSlot], assignmentView{Idx: idx, Assignment: a})
 		inSchedule[a.TeacherID] = true
 	}
 	for _, t := range teachers {
@@ -322,29 +313,24 @@ func buildDayGroups(sched *domain.Schedule, teachers []domain.Teacher) []dayGrou
 			continue
 		}
 		for _, ep := range t.ExternalPairs {
-			c := at(ep.TimeSlot)
-			c.external = append(c.external, externalView{TeacherID: t.ID, ExternalPair: ep})
+			external[ep.TimeSlot] = append(external[ep.TimeSlot], externalView{TeacherID: t.ID, ExternalPair: ep})
 		}
 	}
 
+	// Дни и пары по порядку; пустые пропускаются.
 	var groups []dayGroup
 	for _, day := range domain.AllDays {
-		pairsMap := byDay[day]
-		if len(pairsMap) == 0 {
-			continue
-		}
-		var pairNums []int
-		for p := range pairsMap {
-			pairNums = append(pairNums, p)
-		}
-		sort.Ints(pairNums)
 		var pairs []pairGroup
-		for _, p := range pairNums {
-			c := pairsMap[p]
-			sort.Slice(c.items, func(i, j int) bool { return c.items[i].Idx < c.items[j].Idx })
-			pairs = append(pairs, pairGroup{PairNum: p, Items: c.items, External: c.external})
+		for num := domain.FirstPair; num <= domain.LastPair; num++ {
+			slot := domain.MustNewTimeSlot(day, num)
+			if len(items[slot]) == 0 && len(external[slot]) == 0 {
+				continue
+			}
+			pairs = append(pairs, pairGroup{PairNum: num, Items: items[slot], External: external[slot]})
 		}
-		groups = append(groups, dayGroup{Day: day, Pairs: pairs})
+		if len(pairs) > 0 {
+			groups = append(groups, dayGroup{Day: day, Pairs: pairs})
+		}
 	}
 	return groups
 }

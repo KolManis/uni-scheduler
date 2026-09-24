@@ -78,7 +78,6 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 
 // chooseRuin — какие пары снять на этой итерации.
 func chooseRuin(e *evaluator, rng *rand.Rand) []int {
-	n := len(e.asg)
 	movable := 0
 	for i := range e.asg {
 		if !e.asg[i].Pinned {
@@ -89,47 +88,71 @@ func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 		return nil
 	}
 	frac := lnsDestroyMin + rng.Float64()*(lnsDestroyMax-lnsDestroyMin)
-	k := min(movable, max(1, int(float64(n)*frac)))
-
-	picked := make(map[int]bool, k)
-	var out []int
-	add := func(i int) {
-		if !picked[i] && !e.asg[i].Pinned && len(out) < k {
-			picked[i] = true
-			out = append(out, i)
-		}
-	}
+	ruin := newRuinSet(min(movable, max(1, int(float64(len(e.asg))*frac))))
 
 	switch rng.Intn(3) {
-	case 0: // связанные группы: начинаем с одной и идём по общим потокам
-		if len(e.groups) > 0 {
-			queue := []int{rng.Intn(len(e.groups))}
-			seen := map[int]bool{queue[0]: true}
-			for len(queue) > 0 && len(out) < k {
-				g := queue[0]
-				queue = queue[1:]
-				for _, i := range e.groups[g].members {
-					add(i)
-					for _, other := range e.info[i].groups {
-						if !seen[other] {
-							seen[other] = true
-							queue = append(queue, other)
-						}
-					}
+	case 0:
+		addLinkedGroups(e, rng, ruin)
+	case 1:
+		addWholeTeachers(e, rng, ruin)
+	}
+	for !ruin.full() {
+		ruin.add(e, rng.Intn(len(e.asg)))
+	}
+	return ruin.pairs
+}
+
+// ruinSet — пары, которые снимаются на этой итерации LNS (не больше limit, без закреплённых).
+type ruinSet struct {
+	pairs  []int
+	picked map[int]bool
+	limit  int
+}
+
+func newRuinSet(limit int) *ruinSet {
+	return &ruinSet{picked: make(map[int]bool, limit), limit: limit}
+}
+
+func (r *ruinSet) full() bool { return len(r.pairs) >= r.limit }
+
+// add добавляет пару i, если она ещё не выбрана, не закреплена и место есть.
+func (r *ruinSet) add(e *evaluator, i int) {
+	if !r.picked[i] && !e.asg[i].Pinned && !r.full() {
+		r.picked[i] = true
+		r.pairs = append(r.pairs, i)
+	}
+}
+
+// addLinkedGroups — пары случайной группы и групп, связанных с ней общими потоками
+// (обход в ширину), пока набор не заполнится.
+func addLinkedGroups(e *evaluator, rng *rand.Rand, ruin *ruinSet) {
+	if len(e.groups) == 0 {
+		return
+	}
+	queue := []int{rng.Intn(len(e.groups))}
+	seen := map[int]bool{queue[0]: true}
+	for len(queue) > 0 && !ruin.full() {
+		g := queue[0]
+		queue = queue[1:]
+		for _, i := range e.groups[g].members {
+			ruin.add(e, i)
+			for _, other := range e.info[i].groups {
+				if !seen[other] {
+					seen[other] = true
+					queue = append(queue, other)
 				}
 			}
 		}
-	case 1: // преподаватели целиком
-		for tries := 0; len(out) < k && tries < 10 && len(e.teachers) > 0; tries++ {
-			for _, i := range e.teachers[rng.Intn(len(e.teachers))].members {
-				add(i)
-			}
+	}
+}
+
+// addWholeTeachers — все пары случайных преподавателей (до 10 попыток), пока набор не заполнится.
+func addWholeTeachers(e *evaluator, rng *rand.Rand, ruin *ruinSet) {
+	for tries := 0; !ruin.full() && tries < 10 && len(e.teachers) > 0; tries++ {
+		for _, i := range e.teachers[rng.Intn(len(e.teachers))].members {
+			ruin.add(e, i)
 		}
 	}
-	for len(out) < k {
-		add(rng.Intn(n))
-	}
-	return out
 }
 
 // recreate ставит снятые пары обратно жадно, трудные первыми. false — если какую-то

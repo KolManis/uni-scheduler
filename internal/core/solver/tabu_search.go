@@ -30,16 +30,7 @@ func tabuSearch(assignments []domain.Assignment, input domain.InputData,
 	best := e.snapshot()
 	bestScore := e.score()
 
-	tabuUntil := make([]int, len(e.asg)*numSlots)
-	isTabu := func(undo []move, iter int) bool {
-		for _, m := range undo {
-			// После хода пара стоит в e.slot[m.i]; запрещено возвращаться туда, где она была раньше.
-			if s := e.slot[m.i]; s != unplacedSlot && tabuUntil[m.i*numSlots+s] > iter {
-				return true
-			}
-		}
-		return false
-	}
+	tabuUntil := make([]int, len(e.asg)*numSlots) // [пара*36+слот] — до какой итерации пара не может вернуться в слот
 
 	noImprove := 0
 	for iter := 1; noImprove < tabuMaxNoImprove && !time.Now().After(deadline); iter++ {
@@ -52,7 +43,7 @@ func tabuSearch(assignments []domain.Assignment, input domain.InputData,
 				continue
 			}
 			s := e.score()
-			allowed := !isTabu(undo, iter) || s < bestScore
+			allowed := !isTabu(e, tabuUntil, undo, iter) || s < bestScore
 			if allowed && (bestMove == nil || s < bestNeighbor) {
 				bestMove = forwardOf(e, undo)
 				bestNeighbor = s
@@ -95,4 +86,15 @@ func forwardOf(e *evaluator, undo []move) []move {
 		fwd[k] = move{m.i, e.slot[m.i], e.info[m.i].room}
 	}
 	return fwd
+}
+
+// isTabu — только что сделанный ход (undo — его откат) вернул какую-то пару в слот,
+// который ей запрещён до итерации tabuUntil.
+func isTabu(e *evaluator, tabuUntil []int, undo []move, iter int) bool {
+	for _, m := range undo {
+		if s := e.slot[m.i]; s != unplacedSlot && tabuUntil[m.i*numSlots+s] > iter {
+			return true
+		}
+	}
+	return false
 }

@@ -133,41 +133,43 @@ func insertWithEjection(e *evaluator, i int) bool {
 // blockersAt — поставленные пары в слоте s, которые делят с парой i преподавателя
 // или группу в одну и ту же неделю.
 func blockersAt(e *evaluator, i, s int) []int {
-	inf := &e.info[i]
-	shares := func(j int) bool {
-		if e.asg[j].Pinned {
-			return false // закреплённую пару не вытесняем
-		}
-		o := &e.info[j]
-		if !(inf.weeks[0] && o.weeks[0]) && !(inf.weeks[1] && o.weeks[1]) {
-			return false
-		}
-		if o.teacher == inf.teacher {
-			return true
-		}
-		for _, g := range inf.groups {
-			for _, h := range o.groups {
-				if g == h {
-					return true
-				}
-			}
-		}
-		return false
+	// Мешать могут только пары того же преподавателя или тех же групп.
+	candidates := append([]int(nil), e.teachers[e.info[i].teacher].members...) // копия: members не трогаем
+	for _, g := range e.info[i].groups {
+		candidates = append(candidates, e.groups[g].members...)
 	}
 
 	seen := map[int]bool{}
 	var out []int
-	check := func(members []int) {
-		for _, j := range members {
-			if j != i && e.slot[j] == s && !seen[j] && shares(j) {
-				seen[j] = true
-				out = append(out, j)
+	for _, j := range candidates {
+		if j != i && e.slot[j] == s && !seen[j] && canEject(e, i, j) {
+			seen[j] = true
+			out = append(out, j)
+		}
+	}
+	return out
+}
+
+// canEject — пару j можно снять, чтобы поставить пару i: она не закреплена, идёт с i в
+// общую неделю и делит с ней преподавателя или группу.
+func canEject(e *evaluator, i, j int) bool {
+	if e.asg[j].Pinned {
+		return false
+	}
+	a, b := &e.info[i], &e.info[j]
+	sameWeek := (a.weeks[0] && b.weeks[0]) || (a.weeks[1] && b.weeks[1])
+	if !sameWeek {
+		return false
+	}
+	if a.teacher == b.teacher {
+		return true
+	}
+	for _, g := range a.groups {
+		for _, h := range b.groups {
+			if g == h {
+				return true
 			}
 		}
 	}
-	check(e.teachers[inf.teacher].members)
-	for _, g := range inf.groups {
-		check(e.groups[g].members)
-	}
-	return out
+	return false
 }

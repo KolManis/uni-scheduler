@@ -41,25 +41,9 @@ type scheduleTeachersViewData struct {
 // в этом расписании. Окно — пустая клетка между занятиями в один день, пары на других
 // факультетах тоже считаются занятиями.
 func buildTeacherBlocks(sched *domain.Schedule, teachers []domain.Teacher) []teacherBlock {
-	type key struct {
-		day  domain.Day
-		pair int
-	}
-	byTeacher := map[string]map[key]*teacherCell{}
-	count := map[string]int{}
-	cell := func(tid string, k key) *teacherCell {
-		if byTeacher[tid] == nil {
-			byTeacher[tid] = map[key]*teacherCell{}
-		}
-		if byTeacher[tid][k] == nil {
-			byTeacher[tid][k] = &teacherCell{}
-		}
-		return byTeacher[tid][k]
-	}
+	byTeacher := map[string][]assignmentView{}
 	for idx, a := range sched.Assignments {
-		c := cell(a.TeacherID, key{a.TimeSlot.Day(), a.TimeSlot.PairNum()})
-		c.Items = append(c.Items, assignmentView{Idx: idx, Assignment: a})
-		count[a.TeacherID]++
+		byTeacher[a.TeacherID] = append(byTeacher[a.TeacherID], assignmentView{Idx: idx, Assignment: a})
 	}
 
 	sorted := append([]domain.Teacher(nil), teachers...)
@@ -67,40 +51,56 @@ func buildTeacherBlocks(sched *domain.Schedule, teachers []domain.Teacher) []tea
 
 	var blocks []teacherBlock
 	for _, t := range sorted {
-		if count[t.ID] == 0 {
-			continue
+		if len(byTeacher[t.ID]) > 0 {
+			blocks = append(blocks, buildTeacherBlock(t, byTeacher[t.ID]))
 		}
-		for _, ep := range t.ExternalPairs {
-			c := cell(t.ID, key{ep.TimeSlot.Day(), ep.TimeSlot.PairNum()})
-			c.External = append(c.External, ep)
-		}
-		cells := byTeacher[t.ID]
-		first, last := map[domain.Day]int{}, map[domain.Day]int{}
-		for k := range cells {
-			if v, ok := first[k.day]; !ok || k.pair < v {
-				first[k.day] = k.pair
-			}
-			if v, ok := last[k.day]; !ok || k.pair > v {
-				last[k.day] = k.pair
-			}
-		}
-		b := teacherBlock{TeacherID: t.ID, Name: t.Name, Pairs: count[t.ID]}
-		for _, pair := range allPairs {
-			row := teacherRow{PairNum: pair}
-			for _, day := range allDays {
-				var tc teacherCell
-				if c := cells[key{day, pair}]; c != nil {
-					tc = *c
-				} else if f, ok := first[day]; ok && pair > f && pair < last[day] {
-					tc.IsGap = true
-				}
-				row.Cells = append(row.Cells, tc)
-			}
-			b.Rows = append(b.Rows, row)
-		}
-		blocks = append(blocks, b)
 	}
 	return blocks
+}
+
+// buildTeacherBlock — сетка одного преподавателя: его пары и пары на других факультетах
+// по слотам, пустые клетки между занятиями дня отмечены как окна.
+func buildTeacherBlock(t domain.Teacher, pairs []assignmentView) teacherBlock {
+	cells := map[domain.TimeSlot]teacherCell{}
+	for _, p := range pairs {
+		c := cells[p.TimeSlot]
+		c.Items = append(c.Items, p)
+		cells[p.TimeSlot] = c
+	}
+	for _, ep := range t.ExternalPairs {
+		c := cells[ep.TimeSlot]
+		c.External = append(c.External, ep)
+		cells[ep.TimeSlot] = c
+	}
+
+	block := teacherBlock{TeacherID: t.ID, Name: t.Name, Pairs: len(pairs)}
+	for _, num := range allPairs {
+		row := teacherRow{PairNum: num}
+		for _, day := range allDays {
+			slot := domain.MustNewTimeSlot(day, num)
+			c, busy := cells[slot]
+			if !busy {
+				first, last := busyRange(cells, day)
+				c.IsGap = first > 0 && num > first && num < last
+			}
+			row.Cells = append(row.Cells, c)
+		}
+		block.Rows = append(block.Rows, row)
+	}
+	return block
+}
+
+// busyRange — первая и последняя занятая пара дня; 0, 0 — день свободен.
+func busyRange(cells map[domain.TimeSlot]teacherCell, day domain.Day) (first, last int) {
+	for num := domain.FirstPair; num <= domain.LastPair; num++ {
+		if _, busy := cells[domain.MustNewTimeSlot(day, num)]; busy {
+			if first == 0 {
+				first = num
+			}
+			last = num
+		}
+	}
+	return first, last
 }
 
 func (h *Handler) schedulesTeachersView(w http.ResponseWriter, r *http.Request) {
