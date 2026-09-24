@@ -4,6 +4,8 @@
 `make up` — сборка образа и запуск PostgreSQL + приложения (порт 8080).
 `make demo` — запуск из готового образа без интернета. `make seed` — справочники из
 `data/snapshots` (очищает справочники). `make test` — build + vet + test.
+Обновление существующей базы без потери расписаний — `make db-migrate`: миграции 0003–0008
+идемпотентны (`IF NOT EXISTS`).
 
 ## Сервер кафедры
 `make package` собирает `dist/uni-scheduler.tar.gz`:
