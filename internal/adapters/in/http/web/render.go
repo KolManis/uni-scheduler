@@ -25,6 +25,7 @@ func StaticHandler() http.Handler {
 }
 
 var funcMap = template.FuncMap{
+	"sub": func(a, b int) int { return a - b },
 	"contains": func(list []string, v string) bool {
 		for _, x := range list {
 			if x == v {

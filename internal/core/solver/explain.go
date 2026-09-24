@@ -88,6 +88,15 @@ func groupViolations(groupID string, weekParity domain.Parity, w *week, building
 				fmt.Sprintf("%s → %s: %d-я → %d-я пара", buildingLabel(buildingNames, from), buildingLabel(buildingNames, to), prev+1, next+1), transitionPenalty(from, to, next-prev))
 		}
 	}
+	// Одна пара за всю неделю — день с одной парой неизбежен.
+	if total == 1 {
+		for k := range out.items {
+			if out.items[k].Category == "SingleClassDay" {
+				out.items[k].Unavoidable = true
+				out.items[k].Detail += " — у группы одна пара за всю неделю"
+			}
+		}
+	}
 	out.add("GroupTooFewDays", "Мало учебных дней", "", fmt.Sprintf("%d пар за %d дн.", total, days), tooFewDaysPenalty(total, days))
 	return out.items
 }

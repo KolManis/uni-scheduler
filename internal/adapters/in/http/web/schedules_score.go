@@ -10,6 +10,7 @@ import (
 type scheduleScoreData struct {
 	Schedule   *domain.Schedule
 	Score      int
+	Avoidable  int // часть score, которую можно убрать другим расписанием
 	Rules      []ruleTotal
 	Violations []domain.Violation
 	Teachers   []domain.Teacher
@@ -35,7 +36,7 @@ func (h *Handler) schedulesScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	render(w, r, h.pages["schedules_score.html"], scheduleScoreData{
-		Schedule: eval.Schedule, Score: eval.Score,
+		Schedule: eval.Schedule, Score: eval.Score, Avoidable: eval.Score - unavoidablePenalty(eval.Violations),
 		Rules:      totalsByRule(eval.Violations),
 		Violations: eval.Violations,
 		Teachers:   data.Teachers, Groups: data.Groups,
@@ -58,4 +59,15 @@ func totalsByRule(violations []domain.Violation) []ruleTotal {
 		out[i].Penalty += v.Penalty
 	}
 	return out
+}
+
+// unavoidablePenalty — сумма штрафов, которые не убрать никаким расписанием.
+func unavoidablePenalty(violations []domain.Violation) int {
+	sum := 0
+	for _, v := range violations {
+		if v.Unavoidable {
+			sum += v.Penalty
+		}
+	}
+	return sum
 }

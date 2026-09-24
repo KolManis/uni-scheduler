@@ -85,3 +85,23 @@ func TestExplainScore_GoldenDetails(t *testing.T) {
 		}
 	}
 }
+
+// Одна пара за неделю — день с одной парой неизбежен; две пары в разные дни — нет.
+func TestExplainScore_Unavoidable(t *testing.T) {
+	pair := func(group string, day domain.Day, parity domain.Parity) domain.Assignment {
+		return domain.Assignment{GroupIDs: []string{group}, TeacherID: "T-" + group + string(day),
+			TimeSlot: domain.MustNewTimeSlot(day, 2), Parity: parity}
+	}
+	assignments := []domain.Assignment{
+		pair("ONE", domain.Monday, domain.Even),
+		pair("TWO", domain.Monday, domain.Always), pair("TWO", domain.Tuesday, domain.Always),
+	}
+	for _, v := range ExplainScore(assignments, domain.InputData{}) {
+		if v.Category != "SingleClassDay" {
+			continue
+		}
+		if want := v.GroupIDs[0] == "ONE"; v.Unavoidable != want {
+			t.Errorf("%v %s %s: Unavoidable = %v, want %v", v.GroupIDs, v.Week, v.Day, v.Unavoidable, want)
+		}
+	}
+}

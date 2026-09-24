@@ -146,6 +146,9 @@ type Violation struct {
 	Day       Day      `json:"day,omitempty"`
 	Detail    string   `json:"detail,omitempty"` // что именно: «пары 1 и 4», «корпус A → B после 2-й пары»
 	Penalty   int      `json:"penalty"`
+	// Unavoidable — никакое расписание это не уберёт: так устроены данные (например, у
+	// группы в эту неделю всего одна пара — день с одной парой неизбежен).
+	Unavoidable bool `json:"unavoidable,omitempty"`
 }
 
 // QualityStats — показатели расписания в «человеческих» единицах (штуки, пары),
