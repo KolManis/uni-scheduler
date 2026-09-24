@@ -149,18 +149,34 @@ func (r *ruinSet) add(e *evaluator, i int) {
 	}
 }
 
-// groupWithSingleDay — случайная группа, у которой сейчас есть день с одной парой.
+// groupWithSingleDay — случайная группа, у которой сейчас есть день с одной парой, который
+// можно убрать. Если у группы за неделю всего одна пара, день с одной парой неизбежен
+// при любом расписании (та же проверка, что в ExplainScore), — такая неделя не в счёт.
 func groupWithSingleDay(e *evaluator, rng *rand.Rand) (int, bool) {
 	var found []int
 	for g := range e.groups {
-		if e.groups[g].penalty[0].SingleClassDay+e.groups[g].penalty[1].SingleClassDay > 0 {
-			found = append(found, g)
+		for w := 0; w < 2; w++ {
+			if e.groups[g].penalty[w].SingleClassDay > 0 && e.pairsInWeek(g, w) > 1 {
+				found = append(found, g)
+				break
+			}
 		}
 	}
 	if len(found) == 0 {
 		return 0, false
 	}
 	return found[rng.Intn(len(found))], true
+}
+
+// pairsInWeek — сколько поставленных пар у группы g в неделю w.
+func (e *evaluator) pairsInWeek(g, w int) int {
+	n := 0
+	for _, i := range e.groups[g].members {
+		if e.slot[i] != unplacedSlot && e.info[i].weeks[w] {
+			n++
+		}
+	}
+	return n
 }
 
 // addLinkedGroups — пары группы start и групп, связанных с ней общими потоками
