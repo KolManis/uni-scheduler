@@ -40,7 +40,6 @@ func (h *ScheduleHandler) Generate(w http.ResponseWriter, r *http.Request) {
 
 	cmd, err := generateschedule.NewCommand(generation.Request{
 		Name:           req.Name,
-		MaxIterations:  req.MaxIterations,
 		SolverType:     req.SolverType,
 		TimeoutSec:     req.TimeoutSec,
 		SemesterHalf:   req.SemesterHalf,

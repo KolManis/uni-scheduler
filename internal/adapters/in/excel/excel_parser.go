@@ -32,38 +32,6 @@ var timeToSlot = map[string]int{
 // teacherNameRe извлекает имя преподавателя из строки вида «Преподаватель Доц. Петренко А.А.»
 var teacherNameRe = regexp.MustCompile(`(?i)преподаватель\s+(.+)`)
 
-// ParseFile разбирает xlsx-файл с расписанием преподавателей.
-// Каждый лист — один преподаватель.
-func ParseFile(path string) (*domain.ImportedData, []string, error) {
-	f, err := excelize.OpenFile(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("open xlsx: %w", err)
-	}
-	defer f.Close()
-
-	var data domain.ImportedData
-	var warnings []string
-
-	for _, sheetName := range f.GetSheetList() {
-		rows, err := f.GetRows(sheetName)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("лист %q: не удалось прочитать (%v)", sheetName, err))
-			continue
-		}
-
-		teacherName := extractTeacherName(rows)
-		if teacherName == "" {
-			teacherName = sheetName
-		}
-
-		lessons, w := parseSheet(rows, teacherName)
-		data.Lessons = append(data.Lessons, lessons...)
-		warnings = append(warnings, w...)
-	}
-
-	return &data, warnings, nil
-}
-
 // ParseReader разбирает xlsx из []byte (для HTTP multipart upload).
 func ParseReader(content []byte) (*domain.ImportedData, []string, error) {
 	f, err := excelize.OpenReader(strings.NewReader(string(content)))

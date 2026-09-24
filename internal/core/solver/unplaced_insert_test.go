@@ -70,7 +70,7 @@ func TestInsertUnplaced_NothingToDo(t *testing.T) {
 func TestSolve_PlacesAllAfterInsertion(t *testing.T) {
 	input, _ := ejectionInput()
 	for _, c := range []Construction{ConstructTeacher, ConstructDSatur} {
-		sched, err := SolveWithBudget(input, c, 1000, ImproveHillClimb, 0, 2*time.Second)
+		sched, err := Solve(input, Options{Construction: c, Improve: ImproveHillClimb, Budget: 2 * time.Second})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,11 +82,11 @@ func TestSolve_PlacesAllAfterInsertion(t *testing.T) {
 
 func TestDSatur_RealDataValid(t *testing.T) {
 	input := loadSnapshotInput(t)
-	a, err := SolveWithBudget(input, ConstructDSatur, 1000, ImproveHillClimb, 0, time.Nanosecond)
+	a, err := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := SolveWithBudget(input, ConstructDSatur, 1000, ImproveHillClimb, 0, time.Nanosecond)
+	b, _ := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 	if a.Score != b.Score {
 		t.Errorf("построение без зерна должно быть детерминированным: %d и %d", a.Score, b.Score)
 	}

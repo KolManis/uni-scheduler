@@ -11,7 +11,7 @@ import (
 // улучшения оставляет их на месте и в той же аудитории, остальные пары ставит, дублей нет.
 func TestSolveWithFixed_PinnedStay(t *testing.T) {
 	input := loadSnapshotInput(t)
-	base, err := SolveWithBudget(input, ConstructDSatur, 1000, ImproveHillClimb, 0, time.Nanosecond)
+	base, err := Solve(input, Options{Construction: ConstructDSatur, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestSolveWithFixed_PinnedStay(t *testing.T) {
 
 	for _, algo := range []ImproveAlgorithm{ImproveHillClimb, ImproveSimulatedAnnealing, ImproveTabuSearch, ImproveGeneticAlgorithm, ImproveLNS} {
 		t.Run(string(algo), func(t *testing.T) {
-			sched, err := SolveWithFixed(input, ConstructTeacher, 1000, algo, 0, 2*time.Second, fixed)
+			sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: algo, Budget: 2 * time.Second, Fixed: fixed})
 			if err != nil {
 				t.Fatal(err)
 			}

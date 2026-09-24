@@ -58,7 +58,7 @@ func main() {
 			scores := make([]int, 0, *runs)
 			for run := 1; run <= *runs; run++ {
 				start := time.Now()
-				sched, err := solver.SolveWithBudget(*data, construct, 50000, algo, 0, *budget)
+				sched, err := solver.Solve(*data, solver.Options{Construction: construct, Improve: algo, Budget: *budget})
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "%s/%s прогон %d: %v\n", construct, algo, run, err)
 					continue

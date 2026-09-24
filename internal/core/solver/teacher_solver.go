@@ -72,37 +72,6 @@ func newTeacherState(input domain.InputData) *teacherState {
 	}
 }
 
-// SolveTeacher — teacher-driven подход: преподаватели идут от самых «жёстких» к самым
-// «гибким», их занятия ставятся подряд (компактный дневной график). Внутри преподавателя
-// предметы сортируются так, чтобы потоковые лекции (широкий состав, много часов) шли
-// первыми — им сложнее всего найти общее окно, поэтому им нужен первый выбор.
-//
-// Гибкость = (свободных пар в неделю) / (нужных часов). Мало пар в неделю и/или много
-// недоступных слотов = ниже гибкость = раньше в очереди. Разбиение состава на подпотоки
-// запрещено — см. placeGroupsSplit.
-func SolveTeacher(input domain.InputData, maxIter int, improve ImproveAlgorithm) (*domain.Schedule, error) {
-	return SolveTeacherWithBudget(input, maxIter, improve, 0, 0)
-}
-
-// SolveTeacherWithSeed — SolveTeacher со случайным зерном для многостартового поиска.
-// Сохранён для обратной совместимости.
-func SolveTeacherWithSeed(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64) (*domain.Schedule, error) {
-	return SolveTeacherWithBudget(input, maxIter, improve, seed, 0)
-}
-
-// SolveTeacherWithBudget — SolveTeacher с явно заданным бюджетом на локальный поиск.
-//
-// budget == 0 — используется дефолтный localSearchTotalBudget (60 сек). Для параллельных
-// сценариев (несколько горутин конкурируют за CPU) вызывающая сторона должна передавать
-// бюджет с запасом, иначе deadline срабатывает на converge и метаэвристика не успевает
-// сделать ни одной итерации — все методы возвращают одинаковый score чистого построения.
-//
-// seed == 0 — детерминированное построение. Ненулевой seed перемешивает преподавателей
-// и предметы в пределах одной и той же приоритетной группы.
-func SolveTeacherWithBudget(input domain.InputData, maxIter int, improve ImproveAlgorithm, seed int64, budget time.Duration) (*domain.Schedule, error) {
-	return SolveWithBudget(input, ConstructTeacher, maxIter, improve, seed, budget)
-}
-
 // Construction — алгоритм построения начального расписания.
 type Construction string
 
@@ -123,30 +92,48 @@ func ParseConstruction(s string) (Construction, bool) {
 	return "", false
 }
 
-// SolveWithBudget — построение выбранным алгоритмом и улучшение (LocalSearch).
-// Параметры seed и budget — как у SolveTeacherWithBudget.
-func SolveWithBudget(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
-	seed int64, budget time.Duration) (*domain.Schedule, error) {
-	return SolveWithFixed(input, construct, maxIter, improve, seed, budget, nil)
+// Options — как составлять расписание. Нулевые значения — разумные умолчания.
+type Options struct {
+	Construction Construction     // алгоритм построения; пусто — DSatur
+	Improve      ImproveAlgorithm // метод улучшения; пусто — iterated local search
+	Budget       time.Duration    // время на улучшение; 0 — localSearchTotalBudget (60 с)
+	// Seed — 0: построение детерминированное; иначе пары с равным приоритетом
+	// перемешиваются этим зерном (для нескольких запусков).
+	Seed int64
+	// Starts — сколько запусков с разными зёрнами сделать параллельно и взять лучший;
+	// 0 и 1 — один запуск.
+	Starts int
+	// Fixed — закреплённые пары: стоят заранее и не двигаются, построение ставит остальные
+	// вокруг них, их часы засчитываются в план.
+	Fixed []domain.Assignment
 }
 
-// SolveWithFixed — как SolveWithBudget, но пары fixed стоят заранее и не двигаются
-// (закреплены человеком): построение ставит остальные пары вокруг них, улучшение их не
-// трогает. Часы закреплённых пар засчитываются в план, повторно они не ставятся.
-func SolveWithFixed(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
-	seed int64, budget time.Duration, fixed []domain.Assignment) (*domain.Schedule, error) {
+// Solve составляет расписание: построение, вставка непоставленных, улучшение.
+// Непоставленные пары не ошибка: они видны через ComputeUnplaced.
+func Solve(input domain.InputData, opt Options) (*domain.Schedule, error) {
+	if opt.Construction == "" {
+		opt.Construction = ConstructDSatur
+	}
+	if opt.Starts > 1 {
+		return solveMultiStart(input, opt)
+	}
+	return solveOnce(input, opt)
+}
+
+// solveOnce — один запуск: построение выбранным алгоритмом и улучшение.
+func solveOnce(input domain.InputData, opt Options) (*domain.Schedule, error) {
 	input = normalizeInput(input)
 	state := newTeacherState(input)
-	for _, a := range fixed {
+	for _, a := range opt.Fixed {
 		placeFixed(state, a)
 	}
 
 	var rng *rand.Rand
-	if seed != 0 {
-		rng = rand.New(rand.NewSource(seed))
+	if opt.Seed != 0 {
+		rng = rand.New(rand.NewSource(opt.Seed))
 	}
 
-	if construct == ConstructDSatur {
+	if opt.Construction == ConstructDSatur {
 		constructDSatur(state, rng)
 	} else {
 		constructByTeacher(state, rng)
@@ -160,14 +147,14 @@ func SolveWithFixed(input domain.InputData, construct Construction, maxIter int,
 		state.logger.Warn("not all subjects placed, continuing; see unplaced report")
 	}
 
-	improved := LocalSearch(state.assignments, state.input, improve, budget)
+	improved := LocalSearch(state.assignments, state.input, opt.Improve, opt.Budget)
 	score := calculateFitness(improved, state.input)
 
 	state.logger.Info("solve complete",
-		"construction", construct,
+		"construction", opt.Construction,
 		"assignments", len(improved),
 		"score", score,
-		"improve", improve,
+		"improve", opt.Improve,
 	)
 
 	return &domain.Schedule{

@@ -269,7 +269,7 @@ func TestSolve_AvoidsExternalPairs(t *testing.T) {
 	}
 	input.Teachers[0].ExternalPairs = ext
 	for _, c := range []Construction{ConstructTeacher, ConstructDSatur} {
-		sched, err := SolveWithBudget(input, c, 1000, ImproveHillClimb, 0, time.Second)
+		sched, err := Solve(input, Options{Construction: c, Improve: ImproveHillClimb, Budget: time.Second})
 		if err != nil {
 			t.Fatal(err)
 		}

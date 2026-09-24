@@ -155,7 +155,7 @@ func findSubjectPlan(input domain.InputData, id string) *domain.SubjectPlan {
 
 func TestSolveTeacher_HardConstraints(t *testing.T) {
 	input := buildTestInput()
-	sched, err := SolveTeacher(input, 100, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("SolveTeacher вернул ошибку: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestSolveTeacher_HardConstraints(t *testing.T) {
 
 func TestSolveTeacher_AllPairsPlaced(t *testing.T) {
 	input := buildTestInput()
-	sched, err := SolveTeacher(input, 100, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("SolveTeacher вернул ошибку: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestSolveTeacher_AllPairsPlaced(t *testing.T) {
 
 func TestSolveTeacher_SubjectTypeCorrect(t *testing.T) {
 	input := buildTestInput()
-	sched, err := SolveTeacher(input, 100, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("SolveTeacher вернул ошибку: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestSolveTeacher_SubjectTypeCorrect(t *testing.T) {
 
 func TestSolveTeacher_PrintSchedule(t *testing.T) {
 	input := buildTestInput()
-	sched, err := SolveTeacher(input, 100, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("SolveTeacher вернул ошибку: %v", err)
 	}

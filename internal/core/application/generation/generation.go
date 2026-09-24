@@ -14,12 +14,11 @@ import (
 
 // Request — параметры генерации, одинаковые для обеих команд.
 type Request struct {
-	Name          string
-	MaxIterations int
-	SolverType    string              // построение: "" или "dsatur" — самая трудная пара первой, "teacher" — по преподавателям
-	TimeoutSec    int                 // сколько ждать результата; 0 — 120 секунд
-	SemesterHalf  domain.SemesterHalf // "second" — без планов, которые идут только в первой половине семестра
-	ImproveAlgo   string              // метод улучшения: "hillclimb" (по умолчанию) | "sa" | "tabu" | "ga" | "lns"
+	Name         string
+	SolverType   string              // построение: "" или "dsatur" — самая трудная пара первой, "teacher" — по преподавателям
+	TimeoutSec   int                 // сколько ждать результата; 0 — 120 секунд
+	SemesterHalf domain.SemesterHalf // "second" — без планов, которые идут только в первой половине семестра
+	ImproveAlgo  string              // метод улучшения: "hillclimb" (по умолчанию) | "sa" | "tabu" | "ga" | "lns"
 	// ParallelStarts — сколько раз составить с разным порядком и взять лучшее; 0 и 1 — один раз.
 	ParallelStarts int
 	Preferences    domain.SolverPreferences // дополнительные правила, по умолчанию выключены
@@ -30,8 +29,7 @@ type Request struct {
 
 // Значения по умолчанию.
 const (
-	DefaultTimeoutSec    = 120
-	defaultMaxIterations = 50000
+	DefaultTimeoutSec = 120
 	// saveReserve — сколько таймаута оставить на сохранение: солверу достаётся остальное.
 	saveReserve = 15 * time.Second
 	// minSolverBudget — меньше этого улучшение не успевает сойтись на реальных данных.
@@ -46,9 +44,6 @@ func (r Request) Validate() (Request, error) {
 	}
 	if r.Name == "" {
 		r.Name = "Untitled"
-	}
-	if r.MaxIterations <= 0 {
-		r.MaxIterations = defaultMaxIterations
 	}
 	if r.TimeoutSec <= 0 {
 		r.TimeoutSec = DefaultTimeoutSec
@@ -113,7 +108,7 @@ func (g *Generator) Prepare(ctx context.Context, req Request) (*Job, error) {
 // его под именем name. Сохраняет с context.Background(): расписание попадёт в список,
 // даже если пользователь уже закрыл страницу.
 func (g *Generator) SolveAndSave(job *Job, improve solver.ImproveAlgorithm, starts int, name string) (*domain.Schedule, error) {
-	sched, err := solver.SolveMultiStartFixed(job.data, job.construct, job.Request.MaxIterations, improve, starts, job.budget, job.fixed)
+	sched, err := solver.Solve(job.data, solver.Options{Construction: job.construct, Improve: improve, Budget: job.budget, Starts: starts, Fixed: job.fixed})
 	if err != nil {
 		return nil, err
 	}

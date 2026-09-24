@@ -43,7 +43,7 @@ func makeInput() domain.InputData {
 
 func TestSolveTeacher_SimpleCase(t *testing.T) {
 	input := makeInput()
-	sched, err := SolveTeacher(input, 10000, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestSolveTeacher_SimpleCase(t *testing.T) {
 
 func TestSolveTeacher_NoHardConflicts(t *testing.T) {
 	input := makeInput()
-	sched, err := SolveTeacher(input, 10000, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestSolveTeacher_NoHardConflicts(t *testing.T) {
 func TestSolveTeacher_NoSaturday(t *testing.T) {
 	// при достаточном количестве слотов не должен ставить пары в субботу
 	input := makeInput()
-	sched, err := SolveTeacher(input, 10000, ImproveHillClimb)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -12,7 +12,7 @@ func TestRequestValidate_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if req.Name != "Untitled" || req.TimeoutSec != DefaultTimeoutSec || req.MaxIterations <= 0 {
+	if req.Name != "Untitled" || req.TimeoutSec != DefaultTimeoutSec {
 		t.Errorf("значения по умолчанию не подставлены: %+v", req)
 	}
 }

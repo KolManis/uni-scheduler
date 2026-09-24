@@ -49,7 +49,7 @@ func TestEvaluator_MatchesFullFitness(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			input := loadSnapshotInput(t)
 			input.Preferences = prefs
-			sched, err := SolveTeacherWithBudget(input, 1000, ImproveHillClimb, 0, time.Nanosecond)
+			sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -84,7 +84,7 @@ func TestEvaluator_MatchesFullFitness(t *testing.T) {
 // TestLNS_KeepsAllPairs — после разрушения и восстановления ни одна пара не теряется.
 func TestLNS_KeepsAllPairs(t *testing.T) {
 	input := loadSnapshotInput(t)
-	sched, err := SolveTeacherWithBudget(input, 1000, ImproveHillClimb, 0, time.Nanosecond)
+	sched, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -67,14 +67,14 @@ func TestSolveTeacher_InputOrderDoesNotMatter(t *testing.T) {
 		return strings.Join(lines, "\n")
 	}
 
-	base, err := SolveTeacherWithBudget(input, 1000, ImproveHillClimb, 0, time.Nanosecond)
+	base, err := Solve(input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 	if err != nil {
 		t.Fatalf("исходный порядок: %v", err)
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := SolveTeacherWithBudget(tt.input, 1000, ImproveHillClimb, 0, time.Nanosecond)
+			got, err := Solve(tt.input, Options{Construction: ConstructTeacher, Improve: ImproveHillClimb, Budget: time.Nanosecond})
 			if err != nil {
 				t.Fatalf("неожиданная ошибка: %v", err)
 			}

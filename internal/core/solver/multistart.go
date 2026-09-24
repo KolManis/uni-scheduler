@@ -8,90 +8,46 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
-// SolveTeacherMultiStart запускает SolveTeacherWithBudget `starts` раз параллельно
-// с разными зёрнами случайности и возвращает лучший результат.
-//
-// budget == 0 — используется дефолтный localSearchTotalBudget. При параллельных запусках
-// вызывающая сторона обязана передавать увеличенный бюджет, чтобы все N горутин успевали
-// сделать метаэвристику под конкуренцией за CPU.
-//
-// starts == 0 или 1 — один запуск, как обычный SolveTeacher.
-func SolveTeacherMultiStart(input domain.InputData, maxIter int, improve ImproveAlgorithm, starts int, budget time.Duration) (*domain.Schedule, error) {
-	return SolveMultiStart(input, ConstructTeacher, maxIter, improve, starts, budget)
-}
-
-// SolveMultiStart — многостартовый поиск с выбранным алгоритмом построения.
-func SolveMultiStart(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm, starts int, budget time.Duration) (*domain.Schedule, error) {
-	return SolveMultiStartFixed(input, construct, maxIter, improve, starts, budget, nil)
-}
-
-// SolveMultiStartFixed — многостартовый поиск вокруг закреплённых пар fixed (см. SolveWithFixed).
-func SolveMultiStartFixed(input domain.InputData, construct Construction, maxIter int, improve ImproveAlgorithm,
-	starts int, budget time.Duration, fixed []domain.Assignment) (*domain.Schedule, error) {
-	if starts <= 1 {
-		return SolveWithFixed(input, construct, maxIter, improve, 0, budget, fixed)
-	}
-
-	type result struct {
-		sched *domain.Schedule
-		err   error
-		seed  int64
-	}
-
-	// seeds[0] = 0 → детерминированный запуск как безопасный baseline.
-	// seeds[1..] → фиксированные, но разные значения; берём time.Now() один раз,
-	// иначе несколько горутин с очень близкими UnixNano-зёрнами дадут одинаковые
-	// перемешивания и весь смысл многостартовости пропадёт.
-	seeds := make([]int64, starts)
+// solveMultiStart запускает solveOnce opt.Starts раз параллельно с разными зёрнами и
+// возвращает расписание с наименьшим score. Первый запуск — без зерна (детерминированный),
+// чтобы результат был не хуже обычного. Бюджет каждому запуску — полный: они идут
+// одновременно, поэтому вызывающий должен закладывать запас на конкуренцию за процессор.
+func solveMultiStart(input domain.InputData, opt Options) (*domain.Schedule, error) {
+	// Зёрна считаются от одного time.Now(): близкие UnixNano у горутин дали бы одинаковые
+	// перемешивания. Множитель — простое число, чтобы зёрна расходились.
 	base := time.Now().UnixNano()
-	seeds[0] = 0
-	for i := 1; i < starts; i++ {
-		seeds[i] = base + int64(i)*1_000_003 // множитель — простое число, чтобы зёрна расходились
-	}
+	schedules := make([]*domain.Schedule, opt.Starts)
+	errs := make([]error, opt.Starts)
 
-	results := make([]result, starts)
 	var wg sync.WaitGroup
-	for i, seed := range seeds {
+	for i := range opt.Starts {
+		run := opt
+		run.Seed = 0
+		if i > 0 {
+			run.Seed = base + int64(i)*1_000_003
+		}
 		wg.Add(1)
-		go func(idx int, s int64) {
+		go func() {
 			defer wg.Done()
-			sched, err := SolveWithFixed(input, construct, maxIter, improve, s, budget, fixed)
-			results[idx] = result{sched: sched, err: err, seed: s}
-		}(i, seed)
+			schedules[i], errs[i] = solveOnce(input, run)
+		}()
 	}
 	wg.Wait()
 
-	// Выбираем лучший (минимальный score). Ошибки пропускаем, но если ВСЕ упали —
-	// возвращаем первую попавшуюся, чтобы вызывающая сторона увидела причину.
 	var best *domain.Schedule
-	var firstErr error
-	for _, r := range results {
-		if r.err != nil {
-			if firstErr == nil {
-				firstErr = r.err
-			}
+	var scores []int
+	for i, s := range schedules {
+		if errs[i] != nil {
 			continue
 		}
-		if best == nil || r.sched.Score < best.Score {
-			best = r.sched
+		scores = append(scores, s.Score)
+		if best == nil || s.Score < best.Score {
+			best = s
 		}
 	}
 	if best == nil {
-		return nil, firstErr
+		return nil, errs[0] // все запуски упали — показываем причину первого
 	}
-
-	slog.Default().Info("multistart complete",
-		"starts", starts,
-		"best_score", best.Score,
-		"scores", func() []int {
-			out := make([]int, 0, len(results))
-			for _, r := range results {
-				if r.sched != nil {
-					out = append(out, r.sched.Score)
-				}
-			}
-			return out
-		}(),
-	)
+	slog.Default().Info("multistart complete", "starts", opt.Starts, "best_score", best.Score, "scores", scores)
 	return best, nil
 }
