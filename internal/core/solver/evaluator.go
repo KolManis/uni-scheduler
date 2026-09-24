@@ -164,7 +164,7 @@ func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.I
 		}
 	}
 
-	// Допустимые аудитории пары — те же проверки, что при построении (findBestRoom).
+	// Допустимые аудитории пары — те же проверки, что при построении (slotFeasible, findBestRoom).
 	for i, a := range e.asg {
 		plan, okPlan := planByID[a.SubjectID]
 		teacher, okTeacher := teacherByID[a.TeacherID]

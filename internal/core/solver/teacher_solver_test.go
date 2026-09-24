@@ -82,7 +82,7 @@ func TestSolveTeacher_NoSaturday(t *testing.T) {
 // разным подпотокам в разное время: если общего свободного окна на весь состав нет, занятие
 // уходит в unplaced целиком. Раньше состав дробился пополам, но это давало некорректные
 // расписания — одну лекцию читают потоку раз, а не N раз каждой половине.
-func TestPlaceGroupsSplit_KeepsGroupsTogether(t *testing.T) {
+func TestPlacePair_KeepsGroupsTogether(t *testing.T) {
 	input := domain.InputData{
 		Groups: []domain.Group{
 			{ID: "G1", StudentCount: 20},
@@ -119,7 +119,7 @@ func TestPlaceGroupsSplit_KeepsGroupsTogether(t *testing.T) {
 		}
 	}
 
-	ok := placeGroupsSplit(state, subject, domain.Practice, teacher, domain.Always, subject.GroupIDs)
+	ok := placePair(state, placementTask{teacher: teacher, subject: subject, classType: domain.Practice, parity: domain.Always})
 	if ok {
 		t.Fatal("expected placement to fail: no common slot on all groups, splitting is not allowed")
 	}
@@ -163,8 +163,8 @@ func TestSlotPenalty_PrefersDayWithSinglePair(t *testing.T) {
 				GroupIDs:  []string{"G1"},
 			}
 
-			sameDay := slotPenalty(state, tt.sameDay, subject, domain.Practice, domain.Always, subject.GroupIDs, tt.sameDay.Day(), "T2")
-			newDay := slotPenalty(state, tt.newDay, subject, domain.Practice, domain.Always, subject.GroupIDs, tt.newDay.Day(), "T2")
+			sameDay := slotPenalty(state, tt.sameDay, subject, domain.Practice, domain.Always, subject.GroupIDs, "T2")
+			newDay := slotPenalty(state, tt.newDay, subject, domain.Practice, domain.Always, subject.GroupIDs, "T2")
 			if sameDay >= newDay {
 				t.Errorf("штраф за день с парой (%d) должен быть меньше, чем за новый день (%d)", sameDay, newDay)
 			}
@@ -219,8 +219,8 @@ func TestSlotPenalty_BlinkingPairFillsOtherWeekGap(t *testing.T) {
 				GroupIDs:  []string{"G1"},
 			}
 
-			inGap := slotPenalty(state, tt.gapSlot, subject, domain.Practice, domain.Even, subject.GroupIDs, tt.gapSlot.Day(), "T4")
-			elsewhere := slotPenalty(state, tt.otherDay, subject, domain.Practice, domain.Even, subject.GroupIDs, tt.otherDay.Day(), "T4")
+			inGap := slotPenalty(state, tt.gapSlot, subject, domain.Practice, domain.Even, subject.GroupIDs, "T4")
+			elsewhere := slotPenalty(state, tt.otherDay, subject, domain.Practice, domain.Even, subject.GroupIDs, "T4")
 			if inGap >= elsewhere {
 				t.Errorf("штраф в окне чётной недели (%d) должен быть меньше, чем в пустом дне (%d)", inGap, elsewhere)
 			}

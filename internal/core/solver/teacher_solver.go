@@ -11,7 +11,6 @@ import (
 
 type teacherState struct {
 	input            domain.InputData
-	teacherMap       map[string]domain.Teacher
 	groupMap         map[string]domain.Group
 	roomMap          map[string]domain.Room
 	assignments      []domain.Assignment
@@ -19,16 +18,11 @@ type teacherState struct {
 	occupiedGroups   map[domain.TimeSlot]map[string]domain.Parity
 	occupiedTeachers map[domain.TimeSlot]map[string]domain.Parity
 	occupiedRooms    map[domain.TimeSlot]map[string]domain.Parity
-	teacherSlots     map[string][]domain.TimeSlot
 	planKeys         map[string]string // id плана → subjectKey, считается один раз
 	logger           *slog.Logger
 }
 
 func newTeacherState(input domain.InputData) *teacherState {
-	tm := make(map[string]domain.Teacher)
-	for _, t := range input.Teachers {
-		tm[t.ID] = t
-	}
 	gm := make(map[string]domain.Group)
 	for _, g := range input.Groups {
 		gm[g.ID] = g
@@ -58,7 +52,6 @@ func newTeacherState(input domain.InputData) *teacherState {
 	}
 	return &teacherState{
 		input:            input,
-		teacherMap:       tm,
 		groupMap:         gm,
 		roomMap:          rm,
 		assignments:      []domain.Assignment{},
@@ -66,7 +59,6 @@ func newTeacherState(input domain.InputData) *teacherState {
 		occupiedGroups:   make(map[domain.TimeSlot]map[string]domain.Parity),
 		occupiedTeachers: occupiedTeachers,
 		occupiedRooms:    make(map[domain.TimeSlot]map[string]domain.Parity),
-		teacherSlots:     make(map[string][]domain.TimeSlot),
 		planKeys:         pk,
 		logger:           slog.Default(),
 	}
@@ -163,18 +155,24 @@ func solveOnce(input domain.InputData, opt Options) (*domain.Schedule, error) {
 	}, nil
 }
 
-// placeFixed ставит закреплённую пару как есть: занимает преподавателя, группы и
-// аудиторию и засчитывает её часы в план.
+// placeFixed ставит закреплённую пару как есть.
 func placeFixed(state *teacherState, a domain.Assignment) {
 	a.Pinned = true
 	if a.Parity == "" {
 		a.Parity = domain.Always
 	}
+	addAssignment(state, a)
+}
+
+// addAssignment добавляет пару в расписание: занимает преподавателя, группы и аудиторию
+// в её слот и чётность и засчитывает её часы в план.
+func addAssignment(state *teacherState, a domain.Assignment) {
 	state.assignments = append(state.assignments, a)
 	if state.subjectCount[a.SubjectID] == nil {
 		state.subjectCount[a.SubjectID] = make(map[domain.ClassType]int)
 	}
-	state.subjectCount[a.SubjectID][a.Type] += 2
+	state.subjectCount[a.SubjectID][a.Type] += 2 // пара — 2 часа
+
 	occupy := func(m map[domain.TimeSlot]map[string]domain.Parity, id string) {
 		if m[a.TimeSlot] == nil {
 			m[a.TimeSlot] = make(map[string]domain.Parity)
@@ -186,7 +184,6 @@ func placeFixed(state *teacherState, a domain.Assignment) {
 	}
 	occupy(state.occupiedTeachers, a.TeacherID)
 	occupy(state.occupiedRooms, a.RoomID)
-	state.teacherSlots[a.TeacherID] = append(state.teacherSlots[a.TeacherID], a.TimeSlot)
 }
 
 // constructByTeacher — построение по преподавателям: от самых ограниченных к самым
@@ -211,114 +208,73 @@ func constructByTeacher(state *teacherState, rng *rand.Rand) {
 	}
 }
 
-// placeGroupsSplit ставит занятие сразу для всех groupIDs одной парой. Если общего окна на весь
-// состав нет — занятие уходит в unplaced. Раньше здесь состав делился пополам и ставился разными
-// парами, но это было некорректно: одну и ту же лекцию/практику нельзя проводить дважды
-// (потоковую лекцию читают одному потоку, практика по учебному плану — единое занятие).
-func placeGroupsSplit(state *teacherState, subject domain.SubjectPlan, classType domain.ClassType,
-	teacher domain.Teacher, parity domain.Parity, groupIDs []string) bool {
-
-	slot, room, found := findBestSlot(state, subject, classType, teacher, parity, groupIDs)
-	if !found {
+// placePair ставит одну пару задачи task: в допустимый слот с наименьшим штрафом, в
+// лучшую по вместимости аудиторию. Состав плана не делится (ADR-0002): если общего
+// свободного слота у преподавателя, всех групп и аудитории нет — false, пара остаётся
+// непоставленной.
+func placePair(state *teacherState, task placementTask) bool {
+	slot, ok := findBestSlot(state, task)
+	if !ok {
 		return false
 	}
-	assignTeacherSubject(state, subject, classType, *slot, room, parity, groupIDs)
+	room := findBestRoom(state, task, slot)
+	if room == nil {
+		return false
+	}
+	addAssignment(state, domain.Assignment{
+		GroupIDs:   task.subject.GroupIDs,
+		TeacherID:  task.subject.TeacherID,
+		RoomID:     room.ID,
+		SubjectID:  task.subject.ID,
+		Type:       task.classType,
+		TimeSlot:   slot,
+		Parity:     task.parity,
+		BuildingID: room.BuildingID,
+	})
 	return true
 }
 
-// findBestSlot — ищет лучший слот для занятия с day-aware выбором (без окон).
-// Порядок дней: пн→вт→ср→чт→пт, суббота только если нет альтернатив.
-func findBestSlot(state *teacherState, subject domain.SubjectPlan, classType domain.ClassType,
-	teacher domain.Teacher, parity domain.Parity, groupIDs []string) (*domain.TimeSlot, *domain.Room, bool) {
-
-	type candidate struct {
-		slot    domain.TimeSlot
-		room    domain.Room
-		penalty int // меньше = лучше
-	}
-
-	var candidates []candidate
-
-	// Сортируем дни по текущей загрузке (меньше пар → пробуем первым)
-	// Это гарантирует равномерный разброс по неделе
-	dayLoad := make(map[domain.Day]int)
-	for _, a := range state.assignments {
-		dayLoad[a.TimeSlot.Day()]++
-	}
-	orderedDays := []domain.Day{
-		domain.Monday, domain.Tuesday, domain.Wednesday,
-		domain.Thursday, domain.Friday, domain.Saturday,
-	}
-	sort.SliceStable(orderedDays, func(i, j int) bool {
-		di, dj := orderedDays[i], orderedDays[j]
-		if di == domain.Saturday {
-			return false
-		}
-		if dj == domain.Saturday {
-			return true
-		}
-		return dayLoad[di] < dayLoad[dj]
-	})
-
-	for _, day := range orderedDays {
-		for pairNum := 1; pairNum <= 6; pairNum++ {
+// findBestSlot — допустимый слот (slotFeasible) с наименьшим штрафом slotPenalty.
+// Дни перебираются от менее загруженных к более загруженным, суббота последней; при
+// равном штрафе побеждает слот, найденный раньше, — так пары расходятся по неделе.
+func findBestSlot(state *teacherState, task placementTask) (domain.TimeSlot, bool) {
+	var best domain.TimeSlot
+	bestPenalty, found := 0, false
+	for _, day := range daysByLoad(state) {
+		for pairNum := domain.FirstPair; pairNum <= domain.LastPair; pairNum++ {
 			slot := domain.MustNewTimeSlot(day, pairNum)
-
-			if !isTeacherAvailable(slot, teacher) {
+			if !slotFeasible(state, task, slot) {
 				continue
 			}
-			if !isSlotFree(slot, teacher.ID, parity, state.occupiedTeachers) {
-				continue
-			}
-			if !isSlotFreeForAllGroups(slot, groupIDs, parity, state.occupiedGroups) {
-				continue
-			}
-
-			pen := slotPenalty(state, slot, subject, classType, parity, groupIDs, day, teacher.ID)
-
-			for _, room := range state.input.Rooms {
-				if !isRoomSuitable(room, subject.RequiresRoomType) {
-					continue
-				}
-				if !isSlotFree(slot, room.ID, parity, state.occupiedRooms) {
-					continue
-				}
-				ok, _ := isRoomBigEnoughWithOverflow(room, groupIDs, state.groupMap)
-				if !ok {
-					continue
-				}
-				if !isRoomValidForSubject(room, subject, groupIDs, state.groupMap, teacher) {
-					continue
-				}
-				candidates = append(candidates, candidate{slot: slot, room: room, penalty: pen})
-				break // одна аудитория на слот достаточно для сравнения
+			penalty := slotPenalty(state, slot, task.subject, task.classType, task.parity, task.subject.GroupIDs, task.teacher.ID)
+			if !found || penalty < bestPenalty {
+				best, bestPenalty, found = slot, penalty, true
 			}
 		}
 	}
+	return best, found
+}
 
-	if len(candidates) == 0 {
-		return nil, nil, false
+// daysByLoad — дни от менее загруженных парами к более загруженным, суббота всегда последней.
+func daysByLoad(state *teacherState) []domain.Day {
+	load := make(map[domain.Day]int)
+	for _, a := range state.assignments {
+		load[a.TimeSlot.Day()]++
 	}
-
-	// выбираем кандидата с минимальным штрафом
-	best := candidates[0]
-	for _, c := range candidates[1:] {
-		if c.penalty < best.penalty {
-			best = c
+	days := append([]domain.Day(nil), domain.AllDays...)
+	sort.SliceStable(days, func(i, j int) bool {
+		if days[i] == domain.Saturday || days[j] == domain.Saturday {
+			return days[j] == domain.Saturday && days[i] != domain.Saturday
 		}
-	}
-
-	// Теперь найдём лучшую аудиторию для выбранного слота (по вместимости)
-	bestRoom := findBestRoom(state, subject, best.slot, groupIDs, parity, teacher)
-	if bestRoom == nil {
-		return nil, nil, false
-	}
-	return &best.slot, bestRoom, true
+		return load[days[i]] < load[days[j]]
+	})
+	return days
 }
 
 // slotPenalty вычисляет штраф за постановку занятия в slot для групп groupIDs.
 func slotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.SubjectPlan, classType domain.ClassType, parity domain.Parity,
-	groupIDs []string, day domain.Day, teacherID string) int {
+	groupIDs []string, teacherID string) int {
+	day := slot.Day()
 
 	satPenalty := 0
 	if day == domain.Saturday {
@@ -513,8 +469,8 @@ func calcGaps(pairs []int) int {
 
 // findBestRoom ищет подходящую аудиторию для заданного слота.
 // Выбирает аудиторию с минимальным превышением вместимости.
-func findBestRoom(state *teacherState, subject domain.SubjectPlan, slot domain.TimeSlot,
-	groupIDs []string, parity domain.Parity, teacher domain.Teacher) *domain.Room {
+func findBestRoom(state *teacherState, task placementTask, slot domain.TimeSlot) *domain.Room {
+	subject, groupIDs, parity, teacher := task.subject, task.subject.GroupIDs, task.parity, task.teacher
 	totalStudents := 0
 	for _, gid := range groupIDs {
 		if g, ok := state.groupMap[gid]; ok {
@@ -684,13 +640,13 @@ func collectRemaining(state *teacherState, input domain.InputData, teacher domai
 	return tasks
 }
 
-// placeTask пытается поставить одну пару. Если общего окна на весь состав нет —
-// пара уходит в unplaced (без дробления, см. placeGroupsSplit).
+// placeTask ставит одну пару задачи, если по плану она ещё нужна; не получилось — пишет
+// в журнал, пара попадёт в отчёт «Не размещено».
 func placeTask(state *teacherState, task placementTask) {
 	if getRemainingHours(state, task.subject, task.classType) <= 0 {
 		return
 	}
-	if !placeGroupsSplit(state, task.subject, task.classType, task.teacher, task.parity, task.subject.GroupIDs) {
+	if !placePair(state, task) {
 		state.logger.Warn("cannot place",
 			"subject", task.subject.ID,
 			"type", task.classType,
@@ -713,51 +669,6 @@ func sortSubjectsByPriority(subjects []domain.SubjectPlan) {
 		totalJ := subjects[j].LectureHours + subjects[j].PracticeHours + subjects[j].LabHours
 		return totalI > totalJ
 	})
-}
-
-// assignTeacherSubject — назначение предмета (groupIDs может быть подмножеством subject.GroupIDs,
-// если поток был поделён на части через placeGroupsSplit).
-func assignTeacherSubject(state *teacherState, subject domain.SubjectPlan, classType domain.ClassType,
-	slot domain.TimeSlot, room *domain.Room, parity domain.Parity, groupIDs []string) {
-
-	hours := 2
-
-	assignment := domain.Assignment{
-		GroupIDs:   groupIDs,
-		TeacherID:  subject.TeacherID,
-		RoomID:     room.ID,
-		SubjectID:  subject.ID,
-		Type:       classType,
-		TimeSlot:   slot,
-		Parity:     parity,
-		BuildingID: room.BuildingID,
-	}
-
-	state.assignments = append(state.assignments, assignment)
-
-	if state.subjectCount[subject.ID] == nil {
-		state.subjectCount[subject.ID] = make(map[domain.ClassType]int)
-	}
-	state.subjectCount[subject.ID][classType] += hours
-
-	for _, gid := range groupIDs {
-		if state.occupiedGroups[slot] == nil {
-			state.occupiedGroups[slot] = make(map[string]domain.Parity)
-		}
-		state.occupiedGroups[slot][gid] = mergeParity(state.occupiedGroups[slot][gid], parity)
-	}
-
-	if state.occupiedTeachers[slot] == nil {
-		state.occupiedTeachers[slot] = make(map[string]domain.Parity)
-	}
-	state.occupiedTeachers[slot][subject.TeacherID] = mergeParity(state.occupiedTeachers[slot][subject.TeacherID], parity)
-
-	if state.occupiedRooms[slot] == nil {
-		state.occupiedRooms[slot] = make(map[string]domain.Parity)
-	}
-	state.occupiedRooms[slot][room.ID] = mergeParity(state.occupiedRooms[slot][room.ID], parity)
-
-	state.teacherSlots[subject.TeacherID] = append(state.teacherSlots[subject.TeacherID], slot)
 }
 
 // mergeParity — объединение чётностей
