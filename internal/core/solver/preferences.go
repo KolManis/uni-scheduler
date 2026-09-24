@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -61,35 +62,73 @@ type prefPenalties struct {
 	SubjectSpread         int
 }
 
-// preferencePenalties считает штрафы необязательных правил для готового расписания.
+// preferencePenalties — штрафы необязательных правил, суммы по правилам.
 func preferencePenalties(assignments []domain.Assignment, input domain.InputData) prefPenalties {
 	var p prefPenalties
+	for _, v := range preferenceViolations(assignments, input) {
+		switch v.Category {
+		case "SubjectSpread":
+			p.SubjectSpread += v.Penalty
+		case "PracticeBeforeLecture":
+			p.PracticeBeforeLecture += v.Penalty
+		case "LecturePracticeApart":
+			p.LecturePracticeApart += v.Penalty
+		}
+	}
+	return p
+}
+
+// preferenceViolations — нарушения необязательных правил (ADR-0006), по одному на пару и
+// группу. Правила не делятся на недели: считаются по всем парам сразу, один раз.
+func preferenceViolations(assignments []domain.Assignment, input domain.InputData) []domain.Violation {
 	prefs := input.Preferences
+	planName := make(map[string]string, len(input.SubjectPlans))
+	for _, sp := range input.SubjectPlans {
+		planName[sp.ID] = sp.Name
+	}
 
+	var out []domain.Violation
 	if prefs.SameSubjectSameDay {
-		type planGroup struct{ plan, group string }
-		days := make(map[planGroup]map[domain.Day]bool)
-		for _, a := range assignments {
-			if a.Type == domain.Lecture {
-				continue
-			}
-			for _, gid := range a.GroupIDs {
-				k := planGroup{a.SubjectID, gid}
-				if days[k] == nil {
-					days[k] = make(map[domain.Day]bool)
-				}
-				days[k][a.TimeSlot.Day()] = true
-			}
+		out = append(out, subjectSpreadViolations(assignments, planName)...)
+	}
+	if prefs.LectureBeforePractice || prefs.LecturePracticeSameDay {
+		out = append(out, lectureOrderViolations(assignments, input, planName)...)
+	}
+	return out
+}
+
+// subjectSpreadViolations — практики и лабораторные одного плана у группы стоят в разные
+// дни: subjectSpreadPenalty за каждый день сверх первого.
+func subjectSpreadViolations(assignments []domain.Assignment, planName map[string]string) []domain.Violation {
+	type planGroup struct{ plan, group string }
+	days := make(map[planGroup]map[domain.Day]bool)
+	for _, a := range assignments {
+		if a.Type == domain.Lecture {
+			continue
 		}
-		for _, d := range days {
-			p.SubjectSpread += (len(d) - 1) * subjectSpreadPenalty
+		for _, gid := range a.GroupIDs {
+			k := planGroup{a.SubjectID, gid}
+			if days[k] == nil {
+				days[k] = make(map[domain.Day]bool)
+			}
+			days[k][a.TimeSlot.Day()] = true
 		}
 	}
-
-	if !prefs.LectureBeforePractice && !prefs.LecturePracticeSameDay {
-		return p
+	var out []domain.Violation
+	for k, d := range days {
+		if len(d) > 1 {
+			out = append(out, domain.Violation{Category: "SubjectSpread", Rule: "Предмет в разные дни",
+				GroupIDs: []string{k.group}, Detail: fmt.Sprintf("«%s» — в %d разных днях", planName[k.plan], len(d)),
+				Penalty: (len(d) - 1) * subjectSpreadPenalty})
+		}
 	}
+	return out
+}
 
+// lectureOrderViolations — практики и лабораторные относительно лекций по тому же предмету
+// у той же группы: раньше лекции в неделе и/или не в день лекции после неё.
+func lectureOrderViolations(assignments []domain.Assignment, input domain.InputData, planName map[string]string) []domain.Violation {
+	prefs := input.Preferences
 	keyOf := make(map[string]string, len(input.SubjectPlans))
 	for _, sp := range input.SubjectPlans {
 		keyOf[sp.ID] = subjectKey(sp.Name)
@@ -106,25 +145,28 @@ func preferencePenalties(assignments []domain.Assignment, input domain.InputData
 		}
 	}
 
+	var out []domain.Violation
 	for _, a := range assignments {
 		if a.Type == domain.Lecture {
 			continue
 		}
-		pos := weekPosition(a.TimeSlot)
 		for _, gid := range a.GroupIDs {
 			lecs, ok := lectures[subjGroup{keyOf[a.SubjectID], gid}]
 			if !ok {
 				continue
 			}
-			if prefs.LectureBeforePractice && pos < earliest(lecs) {
-				p.PracticeBeforeLecture += practiceBeforeLecturePenalty
+			pair := fmt.Sprintf("«%s», %d-я пара", planName[a.SubjectID], a.TimeSlot.PairNum())
+			if prefs.LectureBeforePractice && weekPosition(a.TimeSlot) < earliest(lecs) {
+				out = append(out, domain.Violation{Category: "PracticeBeforeLecture", Rule: "Практика раньше лекции",
+					GroupIDs: []string{gid}, Day: a.TimeSlot.Day(), Detail: pair, Penalty: practiceBeforeLecturePenalty})
 			}
 			if prefs.LecturePracticeSameDay && !followsLectureSameDay(a.TimeSlot, lecs) {
-				p.LecturePracticeApart += lecturePracticeApartPenalty
+				out = append(out, domain.Violation{Category: "LecturePracticeApart", Rule: "Практика не в день лекции",
+					GroupIDs: []string{gid}, Day: a.TimeSlot.Day(), Detail: pair, Penalty: lecturePracticeApartPenalty})
 			}
 		}
 	}
-	return p
+	return out
 }
 
 func earliest(slots []domain.TimeSlot) int {

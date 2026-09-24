@@ -71,6 +71,16 @@
 
 При переносе в другую аудиторию корпус пары (`building_id`) берётся из аудитории.
 
+`GET /schedules/{id}/violations` — из чего складывается score: пересчитанный score (сумма
+чётной и нечётной недели), разбивка по категориям и каждое нарушение от дорогих к дешёвым.
+
+```json
+{ "score": 24000, "breakdown": { "SingleClassDay": 24000, "...": 0 },
+  "violations": [ { "category": "SingleClassDay", "rule": "День с одной парой",
+    "group_ids": ["G1"], "week": "even", "day": "wednesday", "detail": "только 4-я пара",
+    "penalty": 12000 } ] }
+```
+
 `GET /schedules/{id}/assignments/{idx}/options` — куда можно перенести пару с её чётностью:
 36 записей, по одной на слот сетки.
 

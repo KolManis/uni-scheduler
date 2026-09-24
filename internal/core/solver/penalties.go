@@ -149,18 +149,24 @@ func tooFewDaysPenalty(total, days int) int {
 func transitionsPenalty(w *week, day int, pairs []int) int {
 	penalty := 0
 	for i := 1; i < len(pairs); i++ {
-		from, to := w.building[day*6+pairs[i-1]], w.building[day*6+pairs[i]]
-		if from == "" || to == "" || from == to {
-			continue
-		}
-		switch pairs[i] - pairs[i-1] {
-		case 1:
-			penalty += transitionNextPenalty
-		case 2:
-			penalty += transitionGapPenalty
-		}
+		penalty += transitionPenalty(w.building[day*6+pairs[i-1]], w.building[day*6+pairs[i]], pairs[i]-pairs[i-1])
 	}
 	return penalty
+}
+
+// transitionPenalty — переход между соседними парами дня из корпуса from в корпус to,
+// distance — на сколько пар дальше следующая (1 — сразу, 2 — через одну).
+func transitionPenalty(from, to string, distance int) int {
+	if from == "" || to == "" || from == to {
+		return 0
+	}
+	switch distance {
+	case 1:
+		return transitionNextPenalty
+	case 2:
+		return transitionGapPenalty
+	}
+	return 0
 }
 
 // gapsIn — сколько пустых пар между первой и последней парой дня; pairs по возрастанию.

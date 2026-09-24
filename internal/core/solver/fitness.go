@@ -17,7 +17,7 @@ func calculateFitness(assignments []domain.Assignment, input domain.InputData) i
 //
 // Учебные недели бывают чётные и нечётные, и у каждой своё расписание: пары «всегда»
 // плюс пары своей чётности. Окна, дни с одной парой, перегрузки считаются для каждой
-// недели отдельно, итог — среднее по двум неделям. Раньше обе недели сливались в одну:
+// недели отдельно, итог — сумма двух недель (ADR-0020). Раньше обе недели сливались в одну:
 // пара «только по чётным» закрывала слот и в нечётную неделю, где он на самом деле пуст,
 // и реальные окна и форточки были не видны (на реальных данных: оценка видела 2 окна
 // и 0 дней с одной парой, в чётной неделе их было 13 и 40).
@@ -26,7 +26,7 @@ func calculateFitness(assignments []domain.Assignment, input domain.InputData) i
 func CalculateFitnessBreakdown(assignments []domain.Assignment, input domain.InputData) domain.FitnessBreakdown {
 	even := weekBreakdown(assignmentsInWeek(assignments, domain.Even), input)
 	odd := weekBreakdown(assignmentsInWeek(assignments, domain.Odd), input)
-	b := averageBreakdown(even, odd)
+	b := sumWeeks(even, odd)
 
 	pref := preferencePenalties(assignments, input)
 	b.PracticeBeforeLecture = pref.PracticeBeforeLecture
@@ -51,21 +51,12 @@ func assignmentsInWeek(assignments []domain.Assignment, week domain.Parity) []do
 	return out
 }
 
-func averageBreakdown(even, odd domain.FitnessBreakdown) domain.FitnessBreakdown {
-	avg := func(x, y int) int { return (x + y) / 2 }
-	return domain.FitnessBreakdown{
-		Saturday:             avg(even.Saturday, odd.Saturday),
-		GroupDayOverload:     avg(even.GroupDayOverload, odd.GroupDayOverload),
-		GroupLongDay:         avg(even.GroupLongDay, odd.GroupLongDay),
-		GroupTooFewDays:      avg(even.GroupTooFewDays, odd.GroupTooFewDays),
-		TeacherDayOverload:   avg(even.TeacherDayOverload, odd.TeacherDayOverload),
-		TeacherConcentration: avg(even.TeacherConcentration, odd.TeacherConcentration),
-		GroupGaps:            avg(even.GroupGaps, odd.GroupGaps),
-		TeacherGaps:          avg(even.TeacherGaps, odd.TeacherGaps),
-		BuildingTransitions:  avg(even.BuildingTransitions, odd.BuildingTransitions),
-		SingleClassDay:       avg(even.SingleClassDay, odd.SingleClassDay),
-		GroupLongGaps:        avg(even.GroupLongGaps, odd.GroupLongGaps),
-	}
+// sumWeeks — штрафы за две учебные недели: чётная плюс нечётная (ADR-0020). Пара «каждую
+// неделю» штрафуется в обеих, пара «через неделю» — только в своей.
+func sumWeeks(even, odd domain.FitnessBreakdown) domain.FitnessBreakdown {
+	b := even
+	addBreakdown(&b, odd, 1)
+	return b
 }
 
 // weekBreakdown — штрафы одной учебной недели. На вход — только пары этой недели

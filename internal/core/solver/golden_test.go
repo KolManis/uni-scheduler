@@ -67,21 +67,21 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 	// Суббота: 200 за сам факт + 8000 за единственную пару у G2 в этот день.
 	// SingleClassDay: G2 в среду (1 пара) и G2 в субботу (1 пара) — 2 дня × 12000.
 	// GroupLongGaps: у G2 в четверг пары 2 и 5 — окно в две пары подряд (HC8), 1 000 000.
-	// Штрафы считаются по чётной и нечётной неделе и усредняются. TeacherGaps 150:
-	// окно у T3 в пятницу (2-я пара по чётным, 4-я всегда) есть только в чётную
-	// неделю и весит половину — 30 вместо 60.
+	// Штрафы считаются по чётной и нечётной неделе и складываются (ADR-0020): всё, что
+	// стоит «каждую неделю», учтено дважды. Окно у T3 в пятницу (2-я пара по чётным,
+	// 4-я всегда) есть только в чётную неделю и учтено один раз.
 	want := domain.FitnessBreakdown{
-		Saturday:             8200,
+		Saturday:             16400,
 		GroupDayOverload:     0,
 		GroupLongDay:         0,
-		GroupTooFewDays:      200,
+		GroupTooFewDays:      400,
 		TeacherDayOverload:   0,
 		TeacherConcentration: 0,
-		GroupGaps:            40000,
-		TeacherGaps:          150,
-		BuildingTransitions:  2000,
-		SingleClassDay:       24000,
-		GroupLongGaps:        1000000,
+		GroupGaps:            80000,
+		TeacherGaps:          300,
+		BuildingTransitions:  4000,
+		SingleClassDay:       48000,
+		GroupLongGaps:        2000000,
 	}
 
 	got := CalculateFitnessBreakdown(goldenAssignments(), domain.InputData{})
@@ -89,14 +89,14 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 	if got != want {
 		t.Errorf("разбивка штрафа изменилась\nполучено: %+v\nожидалось: %+v", got, want)
 	}
-	if got.Total() != 1074550 {
-		t.Errorf("итоговый штраф: получено %d, ожидалось 1074550", got.Total())
+	if got.Total() != 2149100 {
+		t.Errorf("итоговый штраф: получено %d, ожидалось 2149100", got.Total())
 	}
 }
 
 func TestGolden_Converge(t *testing.T) {
 	// Сходимость убирает окно в две пары у G2 (HC8), окна, субботу и дни с одной парой.
-	// G1 собирается в один день из четырёх пар (800 за перегрузку дня + 600 за «мало дней»):
+	// G1 собирается в один день из четырёх пар (800 за перегрузку дня + 600 за «мало дней» в каждую из двух недель):
 	// с дорогим днём с одной парой (ADR-0016) до двух дней по две пары отсюда одиночными
 	// ходами не дойти. У G3 пара по нечётным и пара по чётным стоят в одном слоте
 	// («мигалка»), следом пара «всегда»: в обе недели у G3 две пары подряд.
@@ -119,8 +119,8 @@ func TestGolden_Converge(t *testing.T) {
 	if gotRender := renderSchedule(got); gotRender != want {
 		t.Errorf("результат сходимости изменился\nполучено:\n%s\n\nожидалось:\n%s", gotRender, want)
 	}
-	if score := calculateFitness(got, domain.InputData{}); score != 3600 {
-		t.Errorf("штраф после сходимости: получено %d, ожидалось 3600", score)
+	if score := calculateFitness(got, domain.InputData{}); score != 7200 {
+		t.Errorf("штраф после сходимости: получено %d, ожидалось 7200", score)
 	}
 	if !checkHardConstraints(got, nil) {
 		t.Error("сходимость нарушила жёсткие ограничения")

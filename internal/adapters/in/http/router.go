@@ -35,6 +35,7 @@ func NewRouter(
 	api.HandleFunc("/schedules/{id:[0-9]+}", scheduleHandler.GetByID).Methods(http.MethodGet)
 	api.HandleFunc("/schedules/{id:[0-9]+}", scheduleHandler.Delete).Methods(http.MethodDelete)
 	api.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}", scheduleHandler.PatchAssignment).Methods(http.MethodPatch)
+	api.HandleFunc("/schedules/{id:[0-9]+}/violations", scheduleHandler.Violations).Methods(http.MethodGet)
 	api.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}/options", scheduleHandler.MoveOptions).Methods(http.MethodGet)
 	api.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}/pinned", scheduleHandler.SetPinned).Methods(http.MethodPut)
 

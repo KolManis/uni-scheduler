@@ -74,6 +74,7 @@ type dayGroup struct {
 type scheduleViewData struct {
 	Schedule     *domain.Schedule
 	DayGroups    []dayGroup
+	Score        int // пересчитанный score: сумма чётной и нечётной недели
 	Breakdown    domain.FitnessBreakdown
 	Quality      domain.WeekQuality
 	Teachers     []domain.Teacher
@@ -425,28 +426,45 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) loadScheduleView(w http.ResponseWriter, r *http.Request, id int64, status int, errMsg, successMsg string) {
-	sched, err := h.schedule(r.Context(), id)
+	eval, data, err := h.evaluate(r, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writePageError(w, r, err)
 		return
 	}
-	data, err := h.input.LoadInput(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	eval := h.uc.EvaluateSchedule.Handle(evaluateschedule.Query{Schedule: sched, Input: *data})
 	renderStatus(w, r, status, h.pages["schedules_view.html"], scheduleViewData{
-		Schedule: sched, DayGroups: buildDayGroups(sched, data.Teachers), PinnedCount: pinnedCount(sched),
+		Schedule: eval.Schedule, DayGroups: buildDayGroups(eval.Schedule, data.Teachers), PinnedCount: pinnedCount(eval.Schedule),
+		Score:     eval.Score,
 		Breakdown: eval.Breakdown,
 		Quality:   eval.Quality,
 		Teachers:  data.Teachers, Rooms: data.Rooms, Buildings: data.Buildings, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
 		Error: errMsg, Success: successMsg,
 	})
+}
+
+// evaluate — оценка расписания id (score, разбивка, нарушения) и справочники для подписей.
+func (h *Handler) evaluate(r *http.Request, id int64) (evaluateschedule.Result, *domain.InputData, error) {
+	q, err := evaluateschedule.NewQuery(id)
+	if err != nil {
+		return evaluateschedule.Result{}, nil, err
+	}
+	eval, err := h.uc.EvaluateSchedule.Handle(r.Context(), q)
+	if err != nil {
+		return evaluateschedule.Result{}, nil, err
+	}
+	data, err := h.input.LoadInput(r.Context())
+	if err != nil {
+		return evaluateschedule.Result{}, nil, err
+	}
+	return eval, data, nil
+}
+
+// writePageError — 404 для несуществующего расписания, иначе 500.
+func writePageError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, domain.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 func (h *Handler) schedulesView(w http.ResponseWriter, r *http.Request) {

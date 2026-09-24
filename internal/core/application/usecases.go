@@ -67,7 +67,7 @@ func NewUseCases(input ports.InputRepository, output ports.OutputRepository, imp
 
 		GetSchedule:      getschedule.NewHandler(output),
 		ListSchedules:    listschedules.NewHandler(output),
-		EvaluateSchedule: evaluateschedule.NewHandler(),
+		EvaluateSchedule: evaluateschedule.NewHandler(input, output),
 		MoveOptions:      moveoptions.NewHandler(input, output),
 		CheckInput:       checkinput.NewHandler(input),
 	}

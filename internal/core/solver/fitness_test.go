@@ -40,7 +40,7 @@ func TestCalculateFitness_BuildingTransitionSkipsSport(t *testing.T) {
 			name:       "лекция и следом пара в другом учебном корпусе — штраф за переход",
 			secondRoom: "R-other",
 			secondBldg: "OTHER",
-			want:       2000,
+			want:       4000, // 2000 в каждую из двух недель
 		},
 		{
 			name:       "лекция и следом физкультура на стадионе — без штрафа",
@@ -103,7 +103,7 @@ func TestCalculateFitness_TeacherDayOverload(t *testing.T) {
 		{
 			name:  "5 пар в день у преподавателя — перегрузка на одну пару",
 			pairs: 5,
-			want:  3000,
+			want:  6000, // 3000 в каждую из двух недель
 		},
 	}
 
@@ -138,9 +138,9 @@ func TestCalculateFitness_SaturdayPenalty(t *testing.T) {
 		makeAssignment("G1", "T1", domain.Saturday, 2, domain.Always),
 	}
 	score := calculateFitness(assignments, emptyInput)
-	// 2 пары × 200 = 400
-	if score != 400 {
-		t.Fatalf("expected saturday penalty 400, got %d", score)
+	// 2 пары × 200 × 2 недели = 800
+	if score != 800 {
+		t.Fatalf("expected saturday penalty 800, got %d", score)
 	}
 }
 
@@ -151,9 +151,9 @@ func TestCalculateFitness_GapPenalty(t *testing.T) {
 		makeAssignment("G1", "T1", domain.Monday, 3, domain.Always),
 	}
 	score := calculateFitness(assignments, emptyInput)
-	// 1 окно группы × 10000 + 1 окно препода × 60 = 10060
-	if score != 10060 {
-		t.Fatalf("expected gap penalty 10060, got %d", score)
+	// (1 окно группы × 10000 + 1 окно препода × 60) × 2 недели = 20120
+	if score != 20120 {
+		t.Fatalf("expected gap penalty 20120, got %d", score)
 	}
 }
 
@@ -163,7 +163,7 @@ func TestCalculateFitness_SinglePairWindow(t *testing.T) {
 		makeAssignment("G1", "T1", domain.Wednesday, 3, domain.Always),
 	}
 	score := calculateFitness(assignments, emptyInput)
-	if score != 12000 {
-		t.Fatalf("expected single-pair penalty 12000, got %d", score)
+	if score != 24000 { // 12000 в каждую из двух недель
+		t.Fatalf("expected single-pair penalty 24000, got %d", score)
 	}
 }

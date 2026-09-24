@@ -135,6 +135,19 @@ func (b FitnessBreakdown) Total() int {
 		b.BuildingTransitions + b.SingleClassDay + b.GroupLongGaps + b.PracticeBeforeLecture + b.LecturePracticeApart + b.SubjectSpread
 }
 
+// Violation — одно нарушение мягкого требования: какое правило, у кого, когда и сколько
+// стоит. Сумма Penalty всех нарушений расписания равна его score.
+type Violation struct {
+	Category  string   `json:"category"`             // поле FitnessBreakdown: GroupGaps, SingleClassDay…
+	Rule      string   `json:"rule"`                 // название правила по-русски
+	GroupIDs  []string `json:"group_ids,omitempty"`  // у кого: группы…
+	TeacherID string   `json:"teacher_id,omitempty"` // …или преподаватель
+	Week      Parity   `json:"week,omitempty"`       // even | odd; пусто — правило не по неделям
+	Day       Day      `json:"day,omitempty"`
+	Detail    string   `json:"detail,omitempty"` // что именно: «пары 1 и 4», «корпус A → B после 2-й пары»
+	Penalty   int      `json:"penalty"`
+}
+
 // QualityStats — показатели расписания в «человеческих» единицах (штуки, пары),
 // а не в баллах штрафа. По ним видно, что именно плохо, без знания весов fitness.
 type QualityStats struct {

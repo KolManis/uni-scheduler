@@ -7,7 +7,7 @@
 {{$groups := .Groups}}
 {{$subjectPlans := .SubjectPlans}}
 <div class="toolbar">
-  <h1>{{.Schedule.Name}} <span class="muted">(score={{.Schedule.Score}}, занятий={{len .Schedule.Assignments}}{{if eq .Schedule.Options.Construction "dsatur"}}, построение: DSatur{{else if eq .Schedule.Options.Construction "teacher"}}, построение: по преподавателям{{end}})</span></h1>
+  <h1>{{.Schedule.Name}} <span class="muted">(score={{.Score}}, занятий={{len .Schedule.Assignments}}{{if eq .Schedule.Options.Construction "dsatur"}}, построение: DSatur{{else if eq .Schedule.Options.Construction "teacher"}}, построение: по преподавателям{{end}})</span></h1>
   <div class="actions">
     <a class="btn secondary" hx-get="/ui/schedules" hx-target="#main" href="/ui/schedules">← к списку</a>
     <a class="btn secondary" hx-get="/ui/schedules/{{$id}}/groups" hx-target="#main" href="/ui/schedules/{{$id}}/groups">По группам</a>
@@ -59,7 +59,8 @@
 </div>
 
 <details class="card" style="margin-bottom:20px;">
-  <summary style="cursor:pointer; font-weight:600;">Из чего складывается score ({{.Schedule.Score}})</summary>
+  <summary style="cursor:pointer; font-weight:600;">Из чего складывается score ({{.Score}} — сумма чётной и нечётной недели)</summary>
+  <p><a hx-get="/ui/schedules/{{$id}}/score" hx-target="#main" href="/ui/schedules/{{$id}}/score">Подробно по каждому нарушению →</a></p>
   <table style="margin-top:12px;">
     <thead><tr><th>Категория</th><th>Баллы</th><th>Что это значит</th></tr></thead>
     <tbody>

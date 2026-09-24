@@ -63,7 +63,7 @@ func NewHandler(input inputLoader, ref refWriter, uc application.UseCases) *Hand
 			"groups_list.html", "groups_form.html",
 			"teachers_list.html", "teachers_form.html",
 			"subject_plans_list.html", "subject_plans_form.html",
-			"schedules_list.html", "schedules_view.html", "schedules_assignment_form.html", "schedules_groups_view.html", "schedules_teachers_view.html",
+			"schedules_list.html", "schedules_view.html", "schedules_assignment_form.html", "schedules_groups_view.html", "schedules_teachers_view.html", "schedules_score.html",
 			"help.html",
 		),
 	}
@@ -125,6 +125,7 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	ui.HandleFunc("/schedules/{id:[0-9]+}", h.schedulesView).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/groups", h.schedulesGroupsView).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/teachers", h.schedulesTeachersView).Methods(http.MethodGet)
+	ui.HandleFunc("/schedules/{id:[0-9]+}/score", h.schedulesScore).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/regenerate", h.schedulesRegenerate).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}/pin", h.schedulesPin).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}", h.schedulesDelete).Methods(http.MethodDelete)

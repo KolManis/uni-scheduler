@@ -260,7 +260,7 @@ func (e *evaluator) breakdown() domain.FitnessBreakdown {
 	even, odd := e.week[0], e.week[1]
 	even.Saturday += saturdayPairPenalty * e.satCount[0]
 	odd.Saturday += saturdayPairPenalty * e.satCount[1]
-	b := averageBreakdown(even, odd)
+	b := sumWeeks(even, odd)
 	b.PracticeBeforeLecture = e.pref.PracticeBeforeLecture
 	b.LecturePracticeApart = e.pref.LecturePracticeApart
 	b.SubjectSpread = e.pref.SubjectSpread

@@ -1,0 +1,47 @@
+{{define "title"}}Разбор score{{end}}
+{{define "content"}}
+{{$id := .Schedule.ID}}
+{{$teachers := .Teachers}}
+{{$groups := .Groups}}
+<div class="toolbar">
+  <h1>{{.Schedule.Name}} <span class="muted">— score {{.Score}}</span></h1>
+  <div class="actions">
+    <a class="btn secondary" hx-get="/ui/schedules/{{$id}}" hx-target="#main" href="/ui/schedules/{{$id}}">← к расписанию</a>
+    <a class="btn secondary" href="/api/v1/schedules/{{$id}}/violations" target="_blank">JSON</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <div class="hint">Score — сумма штрафов за чётную и нечётную неделю. Пара, которая идёт каждую неделю, нарушает правило в обеих неделях и считается дважды. Пожелания (предмет в разные дни, порядок лекции и практики) считаются один раз.</div>
+  <h2>По правилам</h2>
+  <table>
+    <thead><tr><th>Правило</th><th>Сколько раз</th><th>Штраф</th></tr></thead>
+    <tbody>
+      {{range .Rules}}<tr><td>{{.Rule}}</td><td>{{.Count}}</td><td class="score-bad">{{.Penalty}}</td></tr>
+      {{else}}<tr><td colspan="3" class="score-good">Нарушений нет</td></tr>{{end}}
+      <tr><td><b>Итого</b></td><td></td><td><b>{{.Score}}</b></td></tr>
+    </tbody>
+  </table>
+</div>
+
+{{if .Violations}}
+<div class="card">
+  <h2>Каждое нарушение</h2>
+  <table>
+    <thead><tr><th>Правило</th><th>Кто</th><th>Неделя</th><th>День</th><th>Подробно</th><th>Штраф</th></tr></thead>
+    <tbody>
+      {{range .Violations}}
+      <tr>
+        <td>{{.Rule}}</td>
+        <td>{{if .GroupIDs}}{{joinNames $groups .GroupIDs}}{{end}}{{if and .GroupIDs .TeacherID}}; {{end}}{{if .TeacherID}}{{teacherName $teachers .TeacherID}}{{end}}</td>
+        <td>{{if eq .Week "even"}}чётная{{else if eq .Week "odd"}}нечётная{{else}}обе{{end}}</td>
+        <td>{{if .Day}}{{dayLabel .Day}}{{end}}</td>
+        <td>{{.Detail}}</td>
+        <td>{{.Penalty}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

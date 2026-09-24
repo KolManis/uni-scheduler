@@ -13,6 +13,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/pinassignment"
 	"github.com/KolManis/uni-scheduler/internal/core/application/generation"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/evaluateschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/getschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/moveoptions"
 	"github.com/KolManis/uni-scheduler/internal/core/application/rules"
@@ -97,6 +98,34 @@ func (h *ScheduleHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusOK, result)
+}
+
+// ViolationsResponse — ответ GET /schedules/{id}/violations.
+type ViolationsResponse struct {
+	Score      int                     `json:"score"`
+	Breakdown  domain.FitnessBreakdown `json:"breakdown"`
+	Violations []domain.Violation      `json:"violations"`
+}
+
+// GET /api/v1/schedules/{id}/violations — из чего складывается score: разбивка по
+// категориям и каждое нарушение (правило, кто, неделя, день, штраф).
+func (h *ScheduleHandler) Violations(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	q, err := evaluateschedule.NewQuery(id)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	eval, err := h.uc.EvaluateSchedule.Handle(r.Context(), q)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusOK, ViolationsResponse{Score: eval.Score, Breakdown: eval.Breakdown, Violations: eval.Violations})
 }
 
 // DELETE /api/v1/schedules/{id} — 204.
