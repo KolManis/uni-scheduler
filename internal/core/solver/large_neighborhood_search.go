@@ -110,6 +110,24 @@ func chooseRuin(e *evaluator, rng *rand.Rand) []int {
 	return ruin.pairs
 }
 
+// ruinAndRecreate — одно прицельное разрушение-восстановление для толчка в ILS: снять
+// пары группы g и связанных с ней потоками (5–20% расписания) и поставить заново.
+// false — какую-то пару поставить некуда; расписание тогда надо вернуть к снимку.
+func ruinAndRecreate(e *evaluator, rng *rand.Rand, g int) bool {
+	frac := lnsDestroyMin + rng.Float64()*(lnsDestroyMax-lnsDestroyMin)
+	ruin := newRuinSet(max(1, int(float64(len(e.pairs))*frac)))
+	addLinkedGroups(e, g, ruin)
+	if len(ruin.pairs) == 0 {
+		return true
+	}
+	unplace := make([]move, len(ruin.pairs))
+	for k, i := range ruin.pairs {
+		unplace[k] = move{i, unplacedSlot, e.info[i].room}
+	}
+	e.apply(unplace)
+	return recreate(e, ruin.pairs)
+}
+
 // ruinSet — пары, которые снимаются на этой итерации LNS (не больше limit, без закреплённых).
 type ruinSet struct {
 	pairs  []int

@@ -328,9 +328,21 @@ func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData
 
 	stagnant := 0
 	for stagnant < localSearchMaxStagnation && !time.Now().After(deadline) {
-		kicks := 2 + rng.Intn(3) + stagnant/8
-		for k := 0; k < kicks; k++ {
-			randomMove(e, rng)
+		// Толчок: обычно несколько случайных ходов. Примерно каждый четвёртый раунд, если
+		// у какой-то группы есть день с одной парой, — прицельное разрушение из LNS:
+		// снять её пары вместе со связанными потоками и расставить заново. Случайными
+		// ходами такой день почти не убирается (нужно сдвинуть сразу несколько групп).
+		if g, ok := groupWithSingleDay(e, rng); ok && rng.Intn(4) == 0 {
+			if !ruinAndRecreate(e, rng, g) {
+				e.restore(best)
+				stagnant++
+				continue
+			}
+		} else {
+			kicks := 2 + rng.Intn(3) + stagnant/8
+			for k := 0; k < kicks; k++ {
+				randomMove(e, rng)
+			}
 		}
 		convergeEval(e, deadline)
 		score := e.score()
