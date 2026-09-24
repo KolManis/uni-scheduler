@@ -98,6 +98,23 @@ type Schedule struct {
 	Unplaced    []UnplacedItem    `json:"unplaced,omitempty"`
 	Options     SolverPreferences `json:"options"`
 	CreatedAt   time.Time         `json:"created_at,omitempty"`
+	// Run — как получено расписание: алгоритмы, сиды и число раундов. Хранится вместе с
+	// options; по нему запуск можно повторить (ADR-0023).
+	Run RunInfo `json:"run"`
+}
+
+// RunInfo — параметры запуска солвера, по которым его можно повторить: те же сиды и то же
+// число раундов улучшения на тех же данных дают то же расписание.
+type RunInfo struct {
+	Construction string `json:"construction,omitempty"`  // "dsatur" | "teacher"
+	Improve      string `json:"improve,omitempty"`       // метод улучшения; пусто — ILS
+	Seed         int64  `json:"seed"`                    // сид построения; 0 — без перемешивания
+	ImproveSeed  int64  `json:"improve_seed"`            // сид случайных ходов улучшения
+	Rounds       int    `json:"rounds"`                  // сколько раундов улучшения сделано
+	SemesterHalf string `json:"semester_half,omitempty"` // "second" — без планов первой половины семестра
+	// Exact — повтор даст то же расписание. Не так для имитации отжига: её температура
+	// зависит от прошедшего времени.
+	Exact bool `json:"exact"`
 }
 
 // ScheduleSummary — расписание без тела assignments: для списка расписаний.

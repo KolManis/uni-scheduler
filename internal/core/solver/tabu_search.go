@@ -23,9 +23,8 @@ const (
 // конкретные ходы (обмен i↔j), и возврат тем же путём через другой ход был разрешён.
 // Запрет снимается, если ход даёт новый лучший результат (критерий стремления).
 func tabuSearch(assignments []domain.Assignment, input domain.InputData,
-	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
+	run *runBudget, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	e := newEvaluator(assignments, input, unavail)
 	best := e.snapshot()
 	bestScore := e.score()
@@ -33,7 +32,7 @@ func tabuSearch(assignments []domain.Assignment, input domain.InputData,
 	tabuUntil := make([]int, len(e.pairs)*numSlots) // [пара*36+слот] — до какой итерации пара не может вернуться в слот
 
 	noImprove := 0
-	for iter := 1; noImprove < tabuMaxNoImprove && !time.Now().After(deadline); iter++ {
+	for iter := 1; noImprove < tabuMaxNoImprove && run.startRound(); iter++ {
 		var bestMove []move
 		bestNeighbor := 0
 
@@ -75,7 +74,7 @@ func tabuSearch(assignments []domain.Assignment, input domain.InputData,
 	}
 
 	e.restore(best)
-	convergeEval(e, deadline.Add(5*time.Second))
+	convergeEval(e, run.innerDeadline().Add(5*time.Second))
 	return e.assignments()
 }
 

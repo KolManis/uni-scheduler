@@ -11,6 +11,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/generateschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/moveassignment"
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/pinassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/replayschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/generation"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/evaluateschedule"
@@ -126,6 +127,27 @@ func (h *ScheduleHandler) Violations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONStatus(w, http.StatusOK, ViolationsResponse{Score: eval.Score, Breakdown: eval.Breakdown, Violations: eval.Violations})
+}
+
+// POST /api/v1/schedules/{id}/replay — повторить запуск с теми же сидами и числом раундов
+// (ADR-0023); 201 и новое расписание.
+func (h *ScheduleHandler) Replay(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	cmd, err := replayschedule.NewCommand(id)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	sched, err := h.uc.ReplaySchedule.Handle(r.Context(), cmd)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSONStatus(w, http.StatusCreated, sched)
 }
 
 // DELETE /api/v1/schedules/{id} — 204.

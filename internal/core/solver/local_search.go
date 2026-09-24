@@ -73,19 +73,21 @@ const (
 // improve — улучшение выбранным методом (ADR-0012) поверх сошедшегося расписания:
 // каждый метод по-своему выбирается из локального оптимума, куда converge не пускает.
 // Пусто или неизвестное значение — iterated local search.
+// run — когда остановиться (по времени или по числу раундов, ADR-0023), rng — случайные
+// ходы с записанным сидом.
 func improve(algo ImproveAlgorithm, assignments []domain.Assignment, input domain.InputData,
-	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
+	run *runBudget, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
 	switch algo {
 	case ImproveSimulatedAnnealing:
-		return simulatedAnnealing(assignments, input, deadline, unavail)
+		return simulatedAnnealing(assignments, input, run.deadline, rng, unavail)
 	case ImproveTabuSearch:
-		return tabuSearch(assignments, input, deadline, unavail)
+		return tabuSearch(assignments, input, run, rng, unavail)
 	case ImproveGeneticAlgorithm:
-		return geneticAlgorithm(assignments, input, deadline, unavail)
+		return geneticAlgorithm(assignments, input, run, rng, unavail)
 	case ImproveLNS:
-		return largeNeighborhoodSearch(assignments, input, deadline, unavail)
+		return largeNeighborhoodSearch(assignments, input, run, rng, unavail)
 	default:
-		return iteratedLocalSearch(assignments, input, deadline, unavail)
+		return iteratedLocalSearch(assignments, input, run, rng, unavail)
 	}
 }
 
@@ -319,32 +321,38 @@ func (e *evaluator) restore(snap []move) {
 // iteratedLocalSearch — iterated local search: толчок из нескольких случайных ходов,
 // сходимость, и принимаем результат, если он не хуже лучшего. Равные принимаются, чтобы
 // поиск мог двигаться по «плато» одинаковых score. Сила толчка растёт с застоем.
-func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData, deadline time.Time,
-	unavail teacherUnavailable) []domain.Assignment {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+func iteratedLocalSearch(assignments []domain.Assignment, input domain.InputData, run *runBudget,
+	rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
 	e := newEvaluator(assignments, input, unavail)
 	best := e.snapshot()
 	bestScore := e.score()
 
 	stagnant := 0
-	for stagnant < localSearchMaxStagnation && !time.Now().After(deadline) {
+	for stagnant < localSearchMaxStagnation && run.nextRound() {
 		// Толчок: обычно несколько случайных ходов. Примерно каждый четвёртый раунд, если
 		// у какой-то группы есть день с одной парой, — прицельное разрушение из LNS:
 		// снять её пары вместе со связанными потоками и расставить заново. Случайными
 		// ходами такой день почти не убирается (нужно сдвинуть сразу несколько групп).
+		recreated := true
 		if g, ok := groupWithSingleDay(e, rng); ok && rng.Intn(4) == 0 {
-			if !ruinAndRecreate(e, rng, g) {
-				e.restore(best)
-				stagnant++
-				continue
-			}
+			recreated = ruinAndRecreate(e, rng, g)
 		} else {
 			kicks := 2 + rng.Intn(3) + stagnant/8
 			for k := 0; k < kicks; k++ {
 				randomMove(e, rng)
 			}
 		}
-		convergeEval(e, deadline)
+		if recreated {
+			convergeEval(e, run.innerDeadline())
+		}
+		if !run.roundDone() {
+			break // время вышло посреди раунда — он отбрасывается (ADR-0023)
+		}
+		if !recreated {
+			e.restore(best)
+			stagnant++
+			continue
+		}
 		score := e.score()
 
 		switch {

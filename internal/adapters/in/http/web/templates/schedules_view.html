@@ -19,6 +19,16 @@
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 {{if .Success}}<div class="banner success">{{.Success}}</div>{{end}}
 
+{{if .Schedule.Run.Rounds}}
+<div class="card" style="margin-bottom:12px;">
+  <b>Запуск:</b>
+  <span class="muted">метод улучшения — {{if .Schedule.Run.Improve}}{{.Schedule.Run.Improve}}{{else}}hillclimb{{end}},
+    сид построения {{.Schedule.Run.Seed}}, сид улучшения {{.Schedule.Run.ImproveSeed}}, раундов улучшения {{.Schedule.Run.Rounds}}.
+    {{if .Schedule.Run.Exact}}Повтор на тех же данных даст то же расписание.{{else}}Имитацию отжига точно повторить нельзя: её температура зависит от времени.{{end}}</span>
+  <button class="btn small secondary" hx-post="/ui/schedules/{{$id}}/replay" hx-target="#main" hx-pending-text="Повторяю…" style="margin-left:8px;">Повторить запуск</button>
+</div>
+{{end}}
+
 {{if .PinnedCount}}
 <div class="card" style="margin-bottom:12px;">
   <b>Закреплено пар: {{.PinnedCount}}.</b>

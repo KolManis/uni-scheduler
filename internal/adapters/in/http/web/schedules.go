@@ -12,6 +12,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/generateschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/moveassignment"
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/pinassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/replayschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/generation"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/evaluateschedule"
@@ -714,6 +715,35 @@ func (h *Handler) schedulesRegenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	h.loadScheduleView(w, r, sched.ID, http.StatusOK, "",
 		fmt.Sprintf("Новое расписание построено вокруг закреплённых пар (score %d). Исходное сохранено в списке.", sched.Score))
+}
+
+// schedulesReplay — повторить запуск расписания с теми же сидами и числом раундов (ADR-0023).
+func (h *Handler) schedulesReplay(w http.ResponseWriter, r *http.Request) {
+	id, err := int64FromPath(r, "id")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	cmd, err := replayschedule.NewCommand(id)
+	if err != nil {
+		h.loadScheduleView(w, r, id, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+	orig, err := h.schedule(r.Context(), id)
+	if err != nil {
+		writePageError(w, r, err)
+		return
+	}
+	sched, err := h.uc.ReplaySchedule.Handle(r.Context(), cmd)
+	if err != nil {
+		h.loadScheduleView(w, r, id, http.StatusUnprocessableEntity, "Не удалось повторить запуск: "+err.Error(), "")
+		return
+	}
+	msg := fmt.Sprintf("Запуск повторён: score %d, как у исходного.", sched.Score)
+	if sched.Score != orig.Score {
+		msg = fmt.Sprintf("Запуск повторён, но score %d, а у исходного %d: с тех пор менялись справочники или правила оценки.", sched.Score, orig.Score)
+	}
+	h.loadScheduleView(w, r, sched.ID, http.StatusOK, "", msg)
 }
 
 func pinnedCount(sched *domain.Schedule) int {

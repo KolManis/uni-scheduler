@@ -28,9 +28,7 @@ type individual struct {
 // поиск (or-opt) каждого ребёнка. Ребёнок вытесняет худшую особь, если лучше неё;
 // лучшая особь не заменяется никогда.
 func geneticAlgorithm(seed []domain.Assignment, input domain.InputData,
-	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
-
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	run *runBudget, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
 
 	pop := initialPopulation(seed, input, rng, unavail)
 	sortPopulation(pop)
@@ -39,7 +37,7 @@ func geneticAlgorithm(seed []domain.Assignment, input domain.InputData,
 	noImprove := 0
 
 	for gen := 0; gen < gaMaxGenerations && noImprove < gaGensWithoutBest; gen++ {
-		if time.Now().After(deadline) {
+		if !run.nextRound() {
 			break
 		}
 
@@ -54,7 +52,10 @@ func geneticAlgorithm(seed []domain.Assignment, input domain.InputData,
 		for k := 0; k < gaMutationsPerKid; k++ {
 			randomMove(e, rng)
 		}
-		orOptPass(e, deadline)
+		orOptPass(e, run.innerDeadline())
+		if !run.roundDone() {
+			break // время вышло посреди поколения — оно отбрасывается (ADR-0023)
+		}
 		childScore := e.score()
 
 		worst := &pop[len(pop)-1]
@@ -72,7 +73,7 @@ func geneticAlgorithm(seed []domain.Assignment, input domain.InputData,
 		}
 	}
 
-	return converge(pop[0].assignments, input, deadline.Add(5*time.Second), unavail)
+	return converge(pop[0].assignments, input, run.innerDeadline().Add(5*time.Second), unavail)
 }
 
 // initialPopulation: одна особь — seed целиком (качество не упадёт ниже стартового),

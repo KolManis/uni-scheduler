@@ -90,7 +90,7 @@ func TestLNS_KeepsAllPairs(t *testing.T) {
 	}
 	input = normalizeInput(input)
 	unavail := buildTeacherUnavailable(input)
-	got := largeNeighborhoodSearch(sched.Assignments, input, time.Now().Add(2*time.Second), unavail)
+	got := largeNeighborhoodSearch(sched.Assignments, input, &runBudget{deadline: time.Now().Add(2 * time.Second)}, newRNG(1), unavail)
 	if len(got) != len(sched.Assignments) {
 		t.Fatalf("пар было %d, стало %d", len(sched.Assignments), len(got))
 	}

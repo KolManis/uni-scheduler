@@ -126,6 +126,7 @@ func (h *Handler) RegisterRoutes(r *mux.Router) {
 	ui.HandleFunc("/schedules/{id:[0-9]+}/groups", h.schedulesGroupsView).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/teachers", h.schedulesTeachersView).Methods(http.MethodGet)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/score", h.schedulesScore).Methods(http.MethodGet)
+	ui.HandleFunc("/schedules/{id:[0-9]+}/replay", h.schedulesReplay).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/regenerate", h.schedulesRegenerate).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}/assignments/{idx:[0-9]+}/pin", h.schedulesPin).Methods(http.MethodPost)
 	ui.HandleFunc("/schedules/{id:[0-9]+}", h.schedulesDelete).Methods(http.MethodDelete)

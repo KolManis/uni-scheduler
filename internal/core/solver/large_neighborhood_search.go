@@ -3,7 +3,6 @@ package solver
 import (
 	"math/rand"
 	"sort"
-	"time"
 
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
@@ -34,9 +33,8 @@ const (
 // Раньше «разрушение» переносило пары по одной, не освобождая их слотов заранее,
 // — по сути это был тот же or-opt.
 func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.InputData,
-	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
+	run *runBudget, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	e := newEvaluator(assignments, input, unavail)
 	if len(e.pairs) < 2 {
 		return e.assignments()
@@ -45,7 +43,7 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 	bestScore := e.score()
 
 	noImprove := 0
-	for noImprove < lnsMaxNoImprove && !time.Now().After(deadline) {
+	for noImprove < lnsMaxNoImprove && run.nextRound() {
 		ruined := chooseRuin(e, rng)
 		if len(ruined) == 0 {
 			break
@@ -56,12 +54,18 @@ func largeNeighborhoodSearch(assignments []domain.Assignment, input domain.Input
 		}
 		e.apply(unplace)
 
-		if !recreate(e, ruined) {
+		recreated := recreate(e, ruined)
+		if recreated {
+			convergeEval(e, run.innerDeadline())
+		}
+		if !run.roundDone() {
+			break // время вышло посреди раунда — он отбрасывается (ADR-0023)
+		}
+		if !recreated {
 			e.restore(best)
 			noImprove++
 			continue
 		}
-		convergeEval(e, deadline)
 
 		switch s := e.score(); {
 		case s < bestScore:

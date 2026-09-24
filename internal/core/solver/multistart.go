@@ -26,6 +26,7 @@ func solveMultiStart(input domain.InputData, opt Options) (*domain.Schedule, err
 		if i > 0 {
 			run.Seed = base + int64(i)*1_000_003
 		}
+		run.ImproveSeed = base + int64(i)*2_000_029 + 1
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

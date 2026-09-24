@@ -26,6 +26,9 @@ type Request struct {
 	// BaseScheduleID — перегенерация: закреплённые пары этого расписания остаются на
 	// местах, остальное строится заново вокруг них. 0 — составить с нуля.
 	BaseScheduleID int64
+	// Replay — повторить записанный запуск: те же сиды и то же число раундов улучшения
+	// (ADR-0023). Один старт; ParallelStarts не учитывается.
+	Replay *domain.RunInfo
 }
 
 // DefaultParallelStarts — стартов по умолчанию. Один запуск ILS примерно в каждом шестом
@@ -117,10 +120,16 @@ func (g *Generator) SolveAndSave(job *Job, improve solver.ImproveAlgorithm, star
 	if starts <= 0 {
 		starts = DefaultParallelStarts
 	}
-	sched, err := solver.Solve(job.data, solver.Options{Construction: job.construct, Improve: improve, Budget: job.budget, Starts: starts, Fixed: job.fixed})
+	opts := solver.Options{Construction: job.construct, Improve: improve, Budget: job.budget, Starts: starts, Fixed: job.fixed}
+	if run := job.Request.Replay; run != nil {
+		opts.Starts = 1
+		opts.Seed, opts.ImproveSeed, opts.Rounds = run.Seed, run.ImproveSeed, run.Rounds
+	}
+	sched, err := solver.Solve(job.data, opts)
 	if err != nil {
 		return nil, err
 	}
+	sched.Run.SemesterHalf = string(job.Request.SemesterHalf)
 	sched.Name = name
 	sched.Options = job.Request.Preferences
 	sched.Options.Construction = string(job.construct)

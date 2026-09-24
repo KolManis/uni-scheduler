@@ -29,6 +29,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/importexcel"
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/moveassignment"
 	"github.com/KolManis/uni-scheduler/internal/core/application/commands/pinassignment"
+	"github.com/KolManis/uni-scheduler/internal/core/application/commands/replayschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/generation"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/evaluateschedule"
@@ -45,6 +46,7 @@ type UseCases struct {
 	MoveAssignment     *moveassignment.Handler
 	PinAssignment      *pinassignment.Handler
 	DeleteSchedule     *deleteschedule.Handler
+	ReplaySchedule     *replayschedule.Handler
 	ImportExcel        *importexcel.Handler
 
 	GetSchedule      *getschedule.Handler
@@ -63,6 +65,7 @@ func NewUseCases(input ports.InputRepository, output ports.OutputRepository, imp
 		MoveAssignment:     moveassignment.NewHandler(input, output),
 		PinAssignment:      pinassignment.NewHandler(output),
 		DeleteSchedule:     deleteschedule.NewHandler(output),
+		ReplaySchedule:     replayschedule.NewHandler(output, generator),
 		ImportExcel:        importexcel.NewHandler(imports),
 
 		GetSchedule:      getschedule.NewHandler(output),

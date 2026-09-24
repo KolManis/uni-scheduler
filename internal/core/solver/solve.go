@@ -39,6 +39,13 @@ type Options struct {
 	// Seed — 0: построение детерминированное; иначе пары с равным приоритетом
 	// перемешиваются этим зерном (для нескольких запусков).
 	Seed int64
+	// ImproveSeed — сид случайных ходов улучшения; 0 — выбрать случайно. Какой сид взят,
+	// записывается в Run результата.
+	ImproveSeed int64
+	// Rounds > 0 — повтор записанного запуска: улучшение делает ровно столько раундов,
+	// а не работает до конца Budget (ADR-0023). Вместе с Seed и ImproveSeed из Run
+	// прошлого запуска даёт то же расписание.
+	Rounds int
 	// Starts — сколько запусков с разными зёрнами сделать параллельно и взять лучший;
 	// 0 и 1 — один запуск.
 	Starts int
@@ -67,24 +74,32 @@ func solveOnce(input domain.InputData, opt Options) (*domain.Schedule, error) {
 	if budget <= 0 {
 		budget = localSearchTotalBudget
 	}
-	deadline := time.Now().Add(budget)
+	if opt.ImproveSeed == 0 {
+		opt.ImproveSeed = time.Now().UnixNano()
+	}
+	run := &runBudget{deadline: time.Now().Add(budget), maxRounds: opt.Rounds}
+	rng := newRNG(opt.ImproveSeed)
 
 	// 1. Построение: пары ставятся по одной, каждая — в лучший на этот момент слот.
 	pairs := construct(input, opt)
 	// 2. Пары, не поместившиеся при построении, — ещё попытка, с вытеснением соседей.
 	pairs = insertUnplaced(pairs, input, unavail)
 	// 3. Сходимость: простые перестановки, пока расписание улучшается.
-	pairs = converge(pairs, input, deadline, unavail)
+	pairs = converge(pairs, input, run.innerDeadline(), unavail)
 	// 4. Улучшение выбранным методом — выход из локального оптимума.
-	pairs = improve(opt.Improve, pairs, input, deadline, unavail)
+	pairs = improve(opt.Improve, pairs, input, run, rng, unavail)
 	// 5. Улучшение могло освободить место — последняя попытка поставить оставшиеся пары.
 	pairs = insertUnplaced(pairs, input, unavail)
 
 	score := calculateFitness(pairs, input)
 	slog.Default().Info("solve complete",
 		"construction", opt.Construction, "improve", opt.Improve,
-		"assignments", len(pairs), "score", score)
-	return &domain.Schedule{Assignments: pairs, Score: score}, nil
+		"assignments", len(pairs), "score", score, "seed", opt.Seed, "improve_seed", opt.ImproveSeed, "rounds", run.rounds)
+	return &domain.Schedule{Assignments: pairs, Score: score, Run: domain.RunInfo{
+		Construction: string(opt.Construction), Improve: string(opt.Improve),
+		Seed: opt.Seed, ImproveSeed: opt.ImproveSeed, Rounds: run.rounds,
+		Exact: opt.Improve != ImproveSimulatedAnnealing,
+	}}, nil
 }
 
 // construct — начальное расписание выбранным алгоритмом, вокруг закреплённых пар.
@@ -97,7 +112,7 @@ func construct(input domain.InputData, opt Options) []domain.Assignment {
 
 	var rng *rand.Rand // nil — без перемешивания, построение детерминированное
 	if opt.Seed != 0 {
-		rng = rand.New(rand.NewSource(opt.Seed))
+		rng = newRNG(opt.Seed)
 	}
 	if opt.Construction == ConstructDSatur {
 		constructDSatur(draft, rng)

@@ -32,43 +32,50 @@ func (r *OutputRepository) SaveSchedule(ctx context.Context, sched *domain.Sched
 	if err != nil {
 		return nil, err
 	}
+	runJSON, err := json.Marshal(sched.Run)
+	if err != nil {
+		return nil, err
+	}
 
 	sched.CreatedAt = time.Now().UTC()
 
 	const query = `
-        INSERT INTO schedules (name, assignments, score, unplaced, options, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, name, assignments, score, unplaced, options, created_at
+        INSERT INTO schedules (name, assignments, score, unplaced, options, created_at, run)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, name, assignments, score, unplaced, options, created_at, run
     `
 
-	row := r.pool.QueryRow(ctx, query, sched.Name, assignmentsJSON, sched.Score, unplacedJSON, optionsJSON, sched.CreatedAt)
+	row := r.pool.QueryRow(ctx, query, sched.Name, assignmentsJSON, sched.Score, unplacedJSON, optionsJSON, sched.CreatedAt, runJSON)
 
 	var result domain.Schedule
-	var data, unplacedData, optionsData []byte
-	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &unplacedData, &optionsData, &result.CreatedAt); err != nil {
+	var data, unplacedData, optionsData, runData []byte
+	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &unplacedData, &optionsData, &result.CreatedAt, &runData); err != nil {
 		return nil, err
 	}
 
-	if err := decodeScheduleBody(&result, data, unplacedData, optionsData); err != nil {
+	if err := decodeScheduleBody(&result, data, unplacedData, optionsData, runData); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-// decodeScheduleBody разбирает JSONB-колонки assignments, unplaced и options.
-func decodeScheduleBody(s *domain.Schedule, assignments, unplaced, options []byte) error {
+// decodeScheduleBody разбирает JSONB-колонки assignments, unplaced, options и run.
+func decodeScheduleBody(s *domain.Schedule, assignments, unplaced, options, run []byte) error {
 	if err := decodeJSON(assignments, &s.Assignments, fmt.Sprintf("schedule %d assignments", s.ID)); err != nil {
 		return err
 	}
 	if err := decodeJSON(unplaced, &s.Unplaced, fmt.Sprintf("schedule %d unplaced", s.ID)); err != nil {
 		return err
 	}
-	return decodeJSON(options, &s.Options, fmt.Sprintf("schedule %d options", s.ID))
+	if err := decodeJSON(options, &s.Options, fmt.Sprintf("schedule %d options", s.ID)); err != nil {
+		return err
+	}
+	return decodeJSON(run, &s.Run, fmt.Sprintf("schedule %d run", s.ID))
 }
 
 func (r *OutputRepository) GetSchedule(ctx context.Context, id int64) (*domain.Schedule, error) {
 	const query = `
-        SELECT id, name, assignments, score, unplaced, options, created_at
+        SELECT id, name, assignments, score, unplaced, options, created_at, run
         FROM schedules
         WHERE id = $1
     `
@@ -76,15 +83,15 @@ func (r *OutputRepository) GetSchedule(ctx context.Context, id int64) (*domain.S
 	row := r.pool.QueryRow(ctx, query, id)
 
 	var result domain.Schedule
-	var data, unplacedData, optionsData []byte
-	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &unplacedData, &optionsData, &result.CreatedAt); err != nil {
+	var data, unplacedData, optionsData, runData []byte
+	if err := row.Scan(&result.ID, &result.Name, &data, &result.Score, &unplacedData, &optionsData, &result.CreatedAt, &runData); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, domain.ErrNotFound
 		}
 		return nil, err
 	}
 
-	if err := decodeScheduleBody(&result, data, unplacedData, optionsData); err != nil {
+	if err := decodeScheduleBody(&result, data, unplacedData, optionsData, runData); err != nil {
 		return nil, err
 	}
 	return &result, nil

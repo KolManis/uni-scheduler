@@ -27,9 +27,8 @@ const (
 // поиск возвращается к лучшему решению (повторный нагрев не нужен: температура к этому
 // моменту уже ниже, и поиск продолжает с лучшей точки).
 func simulatedAnnealing(assignments []domain.Assignment, input domain.InputData,
-	deadline time.Time, unavail teacherUnavailable) []domain.Assignment {
+	deadline time.Time, rng *rand.Rand, unavail teacherUnavailable) []domain.Assignment {
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	e := newEvaluator(assignments, input, unavail)
 	if len(e.pairs) < 2 {
 		return e.assignments()
