@@ -9,6 +9,25 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
 
+// Веса подсказки для построения. Это НЕ score: они говорят, куда поставить очередную пару,
+// чтобы следующим парам осталось место и итоговый score получился ниже. Поэтому часть из
+// них нарочно отличается от penalties.go. Общие правила (окно, окно 2+, переход между
+// корпусами, норма пар преподавателя) берутся оттуда же, из penalties.go.
+const (
+	buildSaturdayPenalty      = 25000 // суббота — последней, пока есть будни
+	buildFirstSaturdayPenalty = 40000 // группе, у которой субботы ещё нет, — тем более
+	buildDayLoadPenalty       = 20    // за каждую пару всех групп в этот день: разнести по неделе
+	buildTeacherPairPenalty   = 100   // за каждую пару преподавателя в этот день: разнести по неделе
+	// Пятая пара преподавателя в день: избегать почти любой ценой.
+	buildTeacherOverloadPenalty = 20000
+)
+
+// buildGroupDayPenalty — сколько стоит поставить пару группе, у которой в этот день уже
+// 0, 1, 2, 3, 4+ пар. Пустой день дороже дня с одной парой: иначе построение раскидывает
+// первые пары группы по разным дням и само создаёт дни с единственной парой, которые
+// потом локальный поиск не может собрать без окон (ADR-0016).
+var buildGroupDayPenalty = [5]int{1500, 0, 1000, 15000, 50000}
+
 // placePair ставит одну пару задачи task: в допустимый слот с наименьшим штрафом, в
 // лучшую по вместимости аудиторию, и возвращает этот слот. Состав плана не делится
 // (ADR-0002): если общего свободного слота у преподавателя, всех групп и аудитории нет —
@@ -79,7 +98,7 @@ func slotPenalty(draft *scheduleDraft, slot domain.TimeSlot, subject domain.Subj
 
 	satPenalty := 0
 	if day == domain.Saturday {
-		satPenalty = 25000
+		satPenalty = buildSaturdayPenalty
 		for _, gid := range groupIDs {
 			saturdayPairs := 0
 			for _, a := range draft.assignments {
@@ -94,7 +113,7 @@ func slotPenalty(draft *scheduleDraft, slot domain.TimeSlot, subject domain.Subj
 				}
 			}
 			if saturdayPairs == 0 {
-				satPenalty += 40000
+				satPenalty += buildFirstSaturdayPenalty
 			}
 		}
 	}
@@ -111,7 +130,7 @@ func slotPenalty(draft *scheduleDraft, slot domain.TimeSlot, subject domain.Subj
 	}
 
 	// Глобальный штраф за перегруженный день
-	globalSpread := totalPairsInDay(draft, day) * 20
+	globalSpread := totalPairsInDay(draft, day) * buildDayLoadPenalty
 
 	prefPenalty := preferenceSlotPenalty(draft, subject, classType, slot, groupIDs)
 
@@ -135,26 +154,12 @@ func weekSlotPenalty(draft *scheduleDraft, slot domain.TimeSlot, subject domain.
 		n := len(existing)
 		if n > 0 {
 			all := append(existing, slot.PairNum())
-			gapPenalty += gapsBetween(all)
 			sort.Ints(all)
+			gapPenalty += gapsIn(all)
 			// HC8: окно в 2+ пары подряд — только если другого слота нет.
 			groupLoadPenalty += longGapsIn(all) * longGapPenalty
 		}
-		// Пустой день дороже дня с одной парой: иначе построение раскидывает первые пары
-		// группы по разным дням и само создаёт дни с единственной парой, которые потом
-		// локальный поиск не может собрать без окон.
-		switch {
-		case n >= 4:
-			groupLoadPenalty += 50000
-		case n == 3:
-			groupLoadPenalty += 15000
-		case n == 2:
-			groupLoadPenalty += 1000
-		case n == 1:
-			groupLoadPenalty += 0
-		default:
-			groupLoadPenalty += 1500
-		}
+		groupLoadPenalty += buildGroupDayPenalty[min(n, 4)]
 
 		// Штраф за переход между корпусами. Физкультура не штрафуется: переход в зал
 		// или на стадион для неё обычен и заложен в само занятие.
@@ -166,12 +171,12 @@ func weekSlotPenalty(draft *scheduleDraft, slot domain.TimeSlot, subject domain.
 	// Нагрузка преподавателя за день: 3–4 пары — норма, лёгкое предпочтение разнести
 	// занятия по неделе. Пятая пара — перегрузка, её избегаем почти любой ценой.
 	teacherDayPairs := teacherPairsInDay(draft, teacherID, day, week)
-	teacherSpread := len(teacherDayPairs) * 100
+	teacherSpread := len(teacherDayPairs) * buildTeacherPairPenalty
 	if len(teacherDayPairs) >= teacherMaxPairsPerDay {
-		teacherSpread += 20000
+		teacherSpread += buildTeacherOverloadPenalty
 	}
 
-	return gapPenalty*10000 + groupLoadPenalty + teacherSpread + buildingPenalty
+	return gapPenalty*groupGapPenalty + groupLoadPenalty + teacherSpread + buildingPenalty
 }
 
 // isSportRoomType — спортзал или открытая площадка. Физкультура проходит там, где решит
@@ -203,10 +208,10 @@ func buildingTransitionPenalty(draft *scheduleDraft, gid string, day domain.Day,
 			diff = -diff
 		}
 		switch diff {
-		case 1: // вплотную — критично
-			penalty += 2000
-		case 2: // через одно окно — менее критично
-			penalty += 700
+		case 1:
+			penalty += transitionNextPenalty
+		case 2:
+			penalty += transitionGapPenalty
 		}
 	}
 	return penalty
@@ -249,23 +254,6 @@ func groupPairsInDay(draft *scheduleDraft, groupID string, day domain.Day, week 
 		}
 	}
 	return pairs
-}
-
-// gapsBetween — сколько пустых пар между первой и последней парой набора (порядок не важен).
-func gapsBetween(pairs []int) int {
-	if len(pairs) < 2 {
-		return 0
-	}
-	min, max := pairs[0], pairs[0]
-	for _, p := range pairs[1:] {
-		if p < min {
-			min = p
-		}
-		if p > max {
-			max = p
-		}
-	}
-	return (max - min + 1) - len(pairs)
 }
 
 // findBestRoom ищет подходящую аудиторию для заданного слота.

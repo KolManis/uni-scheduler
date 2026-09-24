@@ -228,7 +228,7 @@ func TestSlotPenalty_BlinkingPairFillsOtherWeekGap(t *testing.T) {
 	}
 }
 
-func TestCalcGaps(t *testing.T) {
+func TestGapsIn(t *testing.T) {
 	cases := []struct {
 		pairs []int
 		want  int
@@ -240,9 +240,9 @@ func TestCalcGaps(t *testing.T) {
 		{[]int{1, 2, 4}, 1},
 	}
 	for _, c := range cases {
-		got := gapsBetween(c.pairs)
+		got := gapsIn(c.pairs)
 		if got != c.want {
-			t.Errorf("gapsBetween(%v) = %d, want %d", c.pairs, got, c.want)
+			t.Errorf("gapsIn(%v) = %d, want %d", c.pairs, got, c.want)
 		}
 	}
 }
