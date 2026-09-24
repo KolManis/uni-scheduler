@@ -15,6 +15,7 @@
 //	  listschedules       список расписаний
 //	  evaluateschedule    из чего складывается score и показатели качества
 //	  moveoptions         куда можно перенести пару и что изменится
+//	  suitablerooms       в какие аудитории можно поставить пару
 //	  checkinput          ошибки в данных до генерации
 //
 // Общее для нескольких сценариев: generation/ (подготовка и запуск солвера), rules/
@@ -36,6 +37,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/getschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/listschedules"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/moveoptions"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/suitablerooms"
 	"github.com/KolManis/uni-scheduler/internal/core/ports"
 )
 
@@ -53,6 +55,7 @@ type UseCases struct {
 	ListSchedules    *listschedules.Handler
 	EvaluateSchedule *evaluateschedule.Handler
 	MoveOptions      *moveoptions.Handler
+	SuitableRooms    *suitablerooms.Handler
 	CheckInput       *checkinput.Handler
 }
 
@@ -72,6 +75,7 @@ func NewUseCases(input ports.InputRepository, output ports.OutputRepository, imp
 		ListSchedules:    listschedules.NewHandler(input, output),
 		EvaluateSchedule: evaluateschedule.NewHandler(input, output),
 		MoveOptions:      moveoptions.NewHandler(input, output),
+		SuitableRooms:    suitablerooms.NewHandler(input, output),
 		CheckInput:       checkinput.NewHandler(input),
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/checkinput"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/evaluateschedule"
 	"github.com/KolManis/uni-scheduler/internal/core/application/queries/moveoptions"
+	"github.com/KolManis/uni-scheduler/internal/core/application/queries/suitablerooms"
 	"github.com/KolManis/uni-scheduler/internal/core/application/rules"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
@@ -202,7 +203,7 @@ type assignmentFormData struct {
 	ScheduleID   int64
 	Idx          int
 	Assignment   domain.Assignment
-	Rooms        []domain.Room
+	RoomGroups   []roomGroup // подходящие аудитории по корпусам
 	Teachers     []domain.Teacher
 	Groups       []domain.Group
 	SubjectPlans []domain.SubjectPlan
@@ -523,14 +524,22 @@ func (h *Handler) schedulesAssignmentForm(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rooms, err := h.roomChoices(r, id, idx, sched.Assignments[idx].RoomID, data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	render(w, r, h.pages["schedules_assignment_form.html"], assignmentFormData{
 		ScheduleID: id, Idx: idx, Assignment: sched.Assignments[idx],
-		Rooms: data.Rooms, Teachers: data.Teachers, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
+		RoomGroups: rooms, Teachers: data.Teachers, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
 		Days: allDays, Pairs: allPairs, Moves: h.moveGrid(r, id, idx, sched.Assignments[idx].RoomID),
 	})
 }
 
 func conflictMessage(c *rules.ConflictError) string {
+	if c.Type == rules.ConflictRoomUnsuitable {
+		return "Аудитория не подходит: " + c.Detail
+	}
 	if c.Type == rules.ConflictTeacherUnavailable {
 		return "Конфликт: преподаватель отметил это время как недоступное"
 	}
@@ -574,9 +583,15 @@ func (h *Handler) reAssignmentForm(w http.ResponseWriter, r *http.Request, id in
 	if cmd.Parity != "" {
 		a.Parity = cmd.Parity
 	}
+	// В списке — настоящая текущая аудитория, а не та, что пытались выбрать.
+	rooms, err := h.roomChoices(r, id, idx, sched.Assignments[idx].RoomID, data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	renderStatus(w, r, status, h.pages["schedules_assignment_form.html"], assignmentFormData{
 		ScheduleID: id, Idx: idx, Assignment: a,
-		Rooms: data.Rooms, Teachers: data.Teachers, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
+		RoomGroups: rooms, Teachers: data.Teachers, Groups: data.Groups, SubjectPlans: data.SubjectPlans,
 		Days: allDays, Pairs: allPairs, Moves: h.moveGrid(r, id, idx, sched.Assignments[idx].RoomID), Error: errMsg,
 	})
 }
@@ -631,6 +646,72 @@ func parityLabel(p domain.Parity) string {
 		return "нечётная неделя"
 	}
 	return "каждая неделя"
+}
+
+// roomGroup — аудитории одного корпуса в списке формы переноса.
+type roomGroup struct {
+	Building string
+	Rooms    []roomChoice
+}
+
+type roomChoice struct {
+	ID    string
+	Label string // «номер (мест, тип)»
+}
+
+// roomChoices — аудитории для формы переноса: только подходящие паре (тип, вместимость,
+// корпус), по корпусам. Текущая аудитория есть в списке всегда, даже если не подходит —
+// иначе форма молча предложила бы другую.
+func (h *Handler) roomChoices(r *http.Request, id int64, idx int, current string, data *domain.InputData) ([]roomGroup, error) {
+	q, err := suitablerooms.NewQuery(id, idx)
+	if err != nil {
+		return nil, err
+	}
+	rooms, err := h.uc.SuitableRooms.Handle(r.Context(), q)
+	if err != nil {
+		return nil, fmt.Errorf("suitable rooms for schedule %d pair %d: %w", id, idx, err)
+	}
+
+	label := func(room domain.Room) string {
+		return fmt.Sprintf("%s (%d мест, %s)", room.Number, room.Capacity, room.Type)
+	}
+	hasCurrent := false
+	for _, room := range rooms {
+		if room.ID == current {
+			hasCurrent = true
+		}
+	}
+	var groups []roomGroup
+	if !hasCurrent {
+		for _, room := range data.Rooms {
+			if room.ID == current {
+				groups = append(groups, roomGroup{
+					Building: "Сейчас",
+					Rooms:    []roomChoice{{ID: room.ID, Label: label(room) + " — не подходит паре"}},
+				})
+			}
+		}
+	}
+
+	buildingName := make(map[string]string, len(data.Buildings))
+	for _, b := range data.Buildings {
+		buildingName[b.ID] = b.Name
+	}
+	byBuilding := make(map[string]int) // корпус → номер группы в groups
+	for _, room := range rooms {
+		name := buildingName[room.BuildingID]
+		if name == "" {
+			name = "Корпус не указан"
+		}
+		i, ok := byBuilding[name]
+		if !ok {
+			i = len(groups)
+			byBuilding[name] = i
+			groups = append(groups, roomGroup{Building: name})
+		}
+		groups[i].Rooms = append(groups[i].Rooms, roomChoice{ID: room.ID, Label: label(room)})
+	}
+	return groups, nil
 }
 
 // moveGrid — сетка вариантов переноса; при ошибке пустая (форма работает и без неё).

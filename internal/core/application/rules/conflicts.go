@@ -15,6 +15,7 @@ const (
 	ConflictRoomBusy            = "room_busy"             // HC3: аудитория занята другой парой
 	ConflictTeacherUnavailable  = "teacher_unavailable"   // HC7: слот отмечен преподавателем как недоступный
 	ConflictTeacherExternalPair = "teacher_external_pair" // HC7: у преподавателя пара на другом факультете
+	ConflictRoomUnsuitable      = "room_unsuitable"       // HC4–HC6: аудитория не подходит паре по типу, вместимости или корпусу
 )
 
 // ConflictError — пару нельзя поставить в это время: что именно мешает.
@@ -24,7 +25,7 @@ type ConflictError struct {
 	Type         string        `json:"type"`
 	ResourceID   string        `json:"resource_id"`
 	ConflictWith int           `json:"conflict_with"`
-	Detail       string        `json:"detail,omitempty"` // пометка пары на другом факультете
+	Detail       string        `json:"detail,omitempty"` // пометка пары на другом факультете или чем не подходит аудитория
 	Parity       domain.Parity `json:"parity,omitempty"` // неделя пары на другом факультете
 }
 

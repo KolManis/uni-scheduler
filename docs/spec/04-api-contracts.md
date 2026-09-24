@@ -66,7 +66,7 @@
 | Ответ | Когда |
 |---|---|
 | 200 | перенос сохранён, score пересчитан |
-| 409 | конфликт: `{"type": "teacher_busy \| group_busy \| room_busy \| teacher_unavailable \| teacher_external_pair", "resource_id": "…", "conflict_with": N}`; у `teacher_unavailable` и `teacher_external_pair` `conflict_with` = −1; у `teacher_external_pair` ещё `detail` (пометка пары на другом факультете) и `parity` (её неделя) |
+| 409 | конфликт: `{"type": "teacher_busy \| group_busy \| room_busy \| teacher_unavailable \| teacher_external_pair \| room_unsuitable", "resource_id": "…", "conflict_with": N}`; у `teacher_unavailable`, `teacher_external_pair` и `room_unsuitable` `conflict_with` = −1; у `teacher_external_pair` ещё `detail` (пометка пары на другом факультете) и `parity` (её неделя); у `room_unsuitable` `detail` — чем аудитория не подходит: тип, вместимость или корпус (проверяется, только если аудитория меняется) |
 | 404 | нет расписания |
 
 При переносе в другую аудиторию корпус пары (`building_id`) берётся из аудитории.

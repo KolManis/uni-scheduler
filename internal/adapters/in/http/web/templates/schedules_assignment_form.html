@@ -70,7 +70,7 @@
     <div class="field">
       <label>Аудитория</label>
       <select name="room_id">
-        {{range .Rooms}}<option value="{{.ID}}" {{if eq .ID $room}}selected{{end}}>{{.Number}} ({{.Capacity}} мест, {{.Type}})</option>{{end}}
+        {{range .RoomGroups}}<optgroup label="{{.Building}}">{{range .Rooms}}<option value="{{.ID}}" {{if eq .ID $room}}selected{{end}}>{{.Label}}</option>{{end}}</optgroup>{{end}}
       </select>
     </div>
     <div class="field">
@@ -83,7 +83,7 @@
     </div>
   </div>
   <div class="hint" style="margin-bottom:12px;">
-    Или задайте время, аудиторию и чётность вручную. Перенос проверяется на конфликты: преподаватель, группы и аудитория должны быть свободны, преподаватель — доступен.
+    Или задайте время, аудиторию и чётность вручную. В списке — только аудитории, подходящие паре по типу, вместимости и корпусу. Перенос проверяется на конфликты: преподаватель, группы и аудитория должны быть свободны, преподаватель — доступен.
   </div>
   <button class="btn" type="submit">Сохранить перенос</button>
   <a class="btn secondary" hx-get="/ui/schedules/{{.ScheduleID}}" hx-target="#main" href="/ui/schedules/{{.ScheduleID}}">Отмена</a>
