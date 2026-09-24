@@ -127,6 +127,16 @@ func checkGroups(data domain.InputData) []Problem {
 				odd += n
 			}
 		}
+		for _, w := range []struct {
+			name  string
+			pairs int
+		}{{"чётную", even}, {"нечётную", odd}} {
+			if w.pairs == 1 {
+				out = append(out, Problem{Severity: ProblemWarning, Object: "Группа " + g.Name,
+					Message: fmt.Sprintf("в %s неделю всего одна пара — день с одной парой (+12 000 к score) будет при любом расписании; "+
+						"если можно, поставьте её каждую неделю или объедините с другой группой", w.name)})
+			}
+		}
 		if busiest := max(even, odd); busiest > maxPairsPerWeek {
 			out = append(out, Problem{Severity: ProblemError, Object: "Группа " + g.Name,
 				Message: fmt.Sprintf("%d пар в неделю — больше, чем слотов в неделе (%d)", busiest, maxPairsPerWeek)})

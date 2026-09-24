@@ -66,7 +66,7 @@ func NewUseCases(input ports.InputRepository, output ports.OutputRepository, imp
 		ImportExcel:        importexcel.NewHandler(imports),
 
 		GetSchedule:      getschedule.NewHandler(output),
-		ListSchedules:    listschedules.NewHandler(output),
+		ListSchedules:    listschedules.NewHandler(input, output),
 		EvaluateSchedule: evaluateschedule.NewHandler(input, output),
 		MoveOptions:      moveoptions.NewHandler(input, output),
 		CheckInput:       checkinput.NewHandler(input),
