@@ -92,7 +92,7 @@ func insertWithEjection(e *evaluator, i int) bool {
 	bestScore := 0
 
 	for s := 0; s < numSlots; s++ {
-		if e.unavail[e.info[i].teacher][s] {
+		if busy := e.unavail[e.info[i].teacher][s]; (busy[0] && e.info[i].weeks[0]) || (busy[1] && e.info[i].weeks[1]) {
 			continue
 		}
 		blockers := blockersAt(e, i, s)

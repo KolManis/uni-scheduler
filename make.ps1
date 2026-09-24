@@ -25,7 +25,7 @@ function Run($cmd, $argList) {
 
 function Show-Help {
     # Ширина колонки команд: "  <prefix> db-reset" + отступ до описания
-    $width = $Prefix.Length + 14
+    $width = $Prefix.Length + 16
 
     function Row($cmd, $desc) {
         $left = "  {0} {1}" -f $Prefix, $cmd
@@ -45,6 +45,7 @@ function Show-Help {
     Row "dev"      "Postgres в Docker, приложение локально через go run"
     Row "db"       "Поднять только postgres"
     Row "db-reset" "Пересоздать БД с нуля, миграции применяются заново"
+    Row "db-migrate" "Накатить новые миграции на существующую БД, данные сохраняются"
     Write-Host ""
     Row "test"     "go build + go vet + go test - Definition of Done"
     Row "build"    "Собрать бинарник в bin\scheduler.exe"
@@ -101,7 +102,17 @@ switch ($Target.ToLower()) {
     "db-reset" {
         Run "docker" @("compose", "down", "-v")
         Run "docker" @("compose", "up", "-d", "--wait", "postgres")
-        Write-Host "БД пересоздана, миграции 0001/0003/0004 применены." -ForegroundColor Green
+        Write-Host "БД пересоздана, миграции 0001/0003/0004/0005/0006 применены." -ForegroundColor Green
+    }
+
+    # Миграции 0003+ идемпотентны (IF NOT EXISTS): накатываются на рабочую базу без потери данных.
+    "db-migrate" {
+        Run "docker" @("compose", "up", "-d", "--wait", "postgres")
+        foreach ($f in Get-ChildItem migrations -Filter "000[3-6]_*.sql" | Sort-Object Name) {
+            Get-Content $f.FullName -Raw -Encoding UTF8 | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d scheduler
+            if ($LASTEXITCODE -ne 0) { throw "миграция $($f.Name) не применилась" }
+        }
+        Write-Host "Миграции 0003-0006 применены." -ForegroundColor Green
     }
 
     "seed"     { Invoke-Seed }

@@ -15,6 +15,7 @@ Go 1.25, PostgreSQL 16. Веб-интерфейс `/ui/*` и REST API `/api/v1/*
 make up      # собрать образ и запустить postgres + приложение
 make seed    # залить справочники из data/snapshots (очищает справочники!)
 make demo    # запуск из уже собранного образа, без интернета
+make db-migrate  # накатить новые миграции на существующую БД, данные сохраняются
 make test    # go build + go vet + go test
 make help    # все команды
 ```

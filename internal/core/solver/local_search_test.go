@@ -214,10 +214,72 @@ func TestBuildTeacherUnavailable(t *testing.T) {
 			{ID: "T2"},
 		},
 	})
-	if !m["T1"][slot] {
+	if m["T1"][slot] != domain.Always {
 		t.Errorf("слот T1 должен быть помечен недоступным")
 	}
 	if _, ok := m["T2"]; ok {
 		t.Errorf("T2 без ограничений не должен попадать в карту")
+	}
+}
+
+// TestExternalPairs_RespectParity — пара на другом факультете по нечётным неделям занимает
+// преподавателя только в нечётную неделю: пара «всегда» в этот слот нельзя, по чётным — можно.
+func TestExternalPairs_RespectParity(t *testing.T) {
+	slot := domain.MustNewTimeSlot(domain.Monday, 2)
+	input := domain.InputData{Teachers: []domain.Teacher{{
+		ID:            "T1",
+		ExternalPairs: []domain.ExternalPair{{TimeSlot: slot, Parity: domain.Odd, Note: "ФИТ"}},
+	}}}
+	unavail := buildTeacherUnavailable(input)
+	mk := func(p domain.Parity) []domain.Assignment {
+		return []domain.Assignment{{GroupIDs: []string{"G1"}, TeacherID: "T1", RoomID: "R1", TimeSlot: slot, Parity: p}}
+	}
+	if checkHardConstraints(mk(domain.Always), unavail) {
+		t.Error("пара «всегда» пересекается с внешней нечётной")
+	}
+	if checkHardConstraints(mk(domain.Odd), unavail) {
+		t.Error("нечётная пара пересекается с внешней нечётной")
+	}
+	if !checkHardConstraints(mk(domain.Even), unavail) {
+		t.Error("чётная пара с внешней нечётной не пересекается")
+	}
+
+	for _, tc := range []struct {
+		parity domain.Parity
+		ok     bool
+	}{{domain.Even, true}, {domain.Always, false}} {
+		elsewhere := mk(tc.parity)
+		elsewhere[0].TimeSlot = domain.MustNewTimeSlot(domain.Tuesday, 1)
+		e := newEvaluator(elsewhere, input, unavail)
+		if _, ok := e.relocate(0, slotIndex(slot)); ok != tc.ok {
+			t.Errorf("оценщик, пара %s: перенос в слот внешней нечётной — %v, ожидалось %v", tc.parity, ok, tc.ok)
+		}
+	}
+}
+
+// TestSolve_AvoidsExternalPairs — построение и улучшение не ставят пары преподавателя
+// на время его пар на других факультетах.
+func TestSolve_AvoidsExternalPairs(t *testing.T) {
+	input := makeInput()
+	var ext []domain.ExternalPair
+	for _, d := range domain.AllDays[:5] {
+		for p := 1; p <= 3; p++ {
+			ext = append(ext, domain.ExternalPair{TimeSlot: domain.MustNewTimeSlot(d, p), Parity: domain.Always})
+		}
+	}
+	input.Teachers[0].ExternalPairs = ext
+	for _, c := range []Construction{ConstructTeacher, ConstructDSatur} {
+		sched, err := SolveWithBudget(input, c, 1000, ImproveHillClimb, 0, time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range sched.Assignments {
+			if a.TeacherID == "T1" && a.TimeSlot.PairNum() <= 3 && a.TimeSlot.Day() != domain.Saturday {
+				t.Errorf("%s: пара T1 в %v — там у него пара на другом факультете", c, a.TimeSlot)
+			}
+		}
+		if n := len(ComputeUnplaced(sched.Assignments, input)); n != 0 {
+			t.Errorf("%s: не поставлено %d", c, n)
+		}
 	}
 }

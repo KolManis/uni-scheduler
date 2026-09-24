@@ -27,6 +27,17 @@ type Teacher struct {
 	MaxWeeklyHours     int        `json:"max_weekly_hours"`
 	UnavailableSlots   []TimeSlot `json:"unavailable_slots,omitempty"`
 	PreferredBuildings []string   `json:"preferred_buildings,omitempty"`
+	// ExternalPairs — пары преподавателя на других факультетах. Их время задано извне
+	// и не меняется; для алгоритма это занятость преподавателя с учётом чётности (HC7).
+	ExternalPairs []ExternalPair `json:"external_pairs,omitempty"`
+}
+
+// ExternalPair — занятие преподавателя вне кафедры: слот, чётность недели и пометка
+// (факультет, предмет, аудитория — что угодно для человека).
+type ExternalPair struct {
+	TimeSlot TimeSlot `json:"time_slot"`
+	Parity   Parity   `json:"parity"`
+	Note     string   `json:"note,omitempty"`
 }
 
 type Room struct {

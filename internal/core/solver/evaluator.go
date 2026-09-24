@@ -23,8 +23,8 @@ type evaluator struct {
 	input   domain.InputData
 	asg     []domain.Assignment
 	info    []asgInfo
-	slot    []int // текущий слот каждой пары, 0..35 или unplacedSlot
-	unavail [][numSlots]bool
+	slot    []int               // текущий слот каждой пары, 0..35 или unplacedSlot
+	unavail [][numSlots][2]bool // преподаватель занят извне: слот × неделя
 
 	teacherOcc [][numSlots][2]uint8
 	groupOcc   [][numSlots][2]uint8
@@ -209,14 +209,14 @@ func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.I
 		}
 	}
 
-	e.unavail = make([][numSlots]bool, len(teacherIdx))
+	e.unavail = make([][numSlots][2]bool, len(teacherIdx))
 	for tid, slots := range unavail {
 		ti, ok := teacherIdx[tid]
 		if !ok {
 			continue
 		}
-		for s := range slots {
-			e.unavail[ti][slotIndex(s)] = true
+		for s, p := range slots {
+			e.unavail[ti][slotIndex(s)] = [2]bool{inWeek(p, domain.Even), inWeek(p, domain.Odd)}
 		}
 	}
 
@@ -317,12 +317,12 @@ func (e *evaluator) fits(i, slot, room int) bool {
 		return true
 	}
 	inf := &e.info[i]
-	if e.unavail[inf.teacher][slot] {
-		return false
-	}
 	for w := 0; w < 2; w++ {
 		if !inf.weeks[w] {
 			continue
+		}
+		if e.unavail[inf.teacher][slot][w] {
+			return false
 		}
 		if e.teacherOcc[inf.teacher][slot][w] != 0 || e.roomOcc[room][slot][w] != 0 {
 			return false

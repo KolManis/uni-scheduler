@@ -57,3 +57,14 @@
 ## Справочники
 `GET`, `POST`, `PUT /{id}`, `DELETE /{id}` для `/buildings`, `/departments`, `/rooms`, `/groups`,
 `/teachers`, `/subject-plans`. `POST /import/excel` — импорт справочников из xlsx.
+
+Пары преподавателя на других факультетах — поле `external_pairs` в теле `/teachers`:
+
+```json
+"external_pairs": [
+  {"time_slot": {"day": "monday", "pair_num": 2}, "parity": "odd", "note": "ФИТ, 305"}
+]
+```
+
+`parity`: `always` | `even` | `odd`. Время этих пар не меняется; алгоритм и ручной перенос не
+ставят пары преподавателя на это время в те же недели (HC7, ADR-0017).

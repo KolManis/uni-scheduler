@@ -113,20 +113,22 @@ func (r *RefWriteRepository) DeleteGroup(ctx context.Context, id string) (bool, 
 func (r *RefWriteRepository) InsertTeacher(ctx context.Context, t domain.Teacher) error {
 	uslots, _ := json.Marshal(t.UnavailableSlots)
 	pbuilds, _ := json.Marshal(t.PreferredBuildings)
+	ext, _ := json.Marshal(externalPairsOrEmpty(t.ExternalPairs))
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO teachers (id, name, department_id, max_weekly_hours, unavailable_slots, preferred_buildings)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds)
+		INSERT INTO teachers (id, name, department_id, max_weekly_hours, unavailable_slots, preferred_buildings, external_pairs)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds, ext)
 	return err
 }
 
 func (r *RefWriteRepository) UpdateTeacher(ctx context.Context, t domain.Teacher) (bool, error) {
 	uslots, _ := json.Marshal(t.UnavailableSlots)
 	pbuilds, _ := json.Marshal(t.PreferredBuildings)
+	ext, _ := json.Marshal(externalPairsOrEmpty(t.ExternalPairs))
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE teachers SET name = $2, department_id = $3, max_weekly_hours = $4,
-		    unavailable_slots = $5, preferred_buildings = $6 WHERE id = $1`,
-		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds)
+		    unavailable_slots = $5, preferred_buildings = $6, external_pairs = $7 WHERE id = $1`,
+		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds, ext)
 	return tag.RowsAffected() > 0, err
 }
 
@@ -193,4 +195,12 @@ func (r *RefWriteRepository) UpdateSubjectPlan(ctx context.Context, sp domain.Su
 func (r *RefWriteRepository) DeleteSubjectPlan(ctx context.Context, id string) (bool, error) {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM subject_plans WHERE id = $1`, id)
 	return tag.RowsAffected() > 0, err
+}
+
+// externalPairsOrEmpty — nil маршалится в null, а колонка NOT NULL и ожидает массив.
+func externalPairsOrEmpty(p []domain.ExternalPair) []domain.ExternalPair {
+	if p == nil {
+		return []domain.ExternalPair{}
+	}
+	return p
 }

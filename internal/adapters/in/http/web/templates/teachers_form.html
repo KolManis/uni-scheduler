@@ -62,6 +62,33 @@
   </div>
 
   <div class="field">
+    <label>Пары на других факультетах <span class="hint">(время задано извне и не меняется — расписание кафедры строится вокруг них; пустые строки не сохраняются, после сохранения появятся новые)</span></label>
+    <table>
+      <thead><tr><th>День</th><th>Пара</th><th>Неделя</th><th>Пометка (факультет, предмет, аудитория)</th></tr></thead>
+      <tbody>
+        {{range .ExternalRows}}
+        {{$row := .}}
+        <tr>
+          <td><select name="ext_day">
+            <option value="">—</option>
+            {{range $.Days}}<option value="{{.}}" {{if and $row.Set (eq . $row.Day)}}selected{{end}}>{{dayLabel .}}</option>{{end}}
+          </select></td>
+          <td><select name="ext_pair">
+            {{range $.Pairs}}<option value="{{.}}" {{if and $row.Set (eq . $row.Pair)}}selected{{end}}>{{.}}</option>{{end}}
+          </select></td>
+          <td><select name="ext_parity">
+            <option value="always" {{if eq $row.Parity "always"}}selected{{end}}>Каждую неделю</option>
+            <option value="odd" {{if eq $row.Parity "odd"}}selected{{end}}>Нечётная неделя</option>
+            <option value="even" {{if eq $row.Parity "even"}}selected{{end}}>Чётная неделя</option>
+          </select></td>
+          <td><input type="text" name="ext_note" value="{{$row.Note}}"></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="field">
     <label>Предпочитаемые корпуса <span class="hint">(если ни один не выбран — подходит любой)</span></label>
     <div class="checkbox-grid">
       {{range .Buildings}}

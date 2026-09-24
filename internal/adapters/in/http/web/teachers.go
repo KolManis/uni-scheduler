@@ -17,13 +17,14 @@ type teachersListData struct {
 }
 
 type teacherFormData struct {
-	Teacher     domain.Teacher
-	Departments []domain.Department
-	Buildings   []domain.Building
-	Days        []domain.Day
-	Pairs       []int
-	IsEdit      bool
-	Error       string
+	Teacher      domain.Teacher
+	ExternalRows []externalRow
+	Departments  []domain.Department
+	Buildings    []domain.Building
+	Days         []domain.Day
+	Pairs        []int
+	IsEdit       bool
+	Error        string
 }
 
 func (h *Handler) loadTeachersList(w http.ResponseWriter, r *http.Request, status int, errMsg string) {
@@ -64,7 +65,62 @@ func (h *Handler) teachersForm(w http.ResponseWriter, r *http.Request) {
 		}
 		fd.IsEdit = true
 	}
+	fd.ExternalRows = externalRows(fd.Teacher.ExternalPairs)
 	render(w, r, h.pages["teachers_form.html"], fd)
+}
+
+// externalBlankRows — сколько пустых строк для новых пар на других факультетах.
+const externalBlankRows = 4
+
+// externalRow — строка таблицы «Пары на других факультетах» в форме преподавателя.
+type externalRow struct {
+	Set    bool
+	Day    domain.Day
+	Pair   int
+	Parity domain.Parity
+	Note   string
+}
+
+func externalRows(pairs []domain.ExternalPair) []externalRow {
+	rows := make([]externalRow, 0, len(pairs)+externalBlankRows)
+	for _, p := range pairs {
+		rows = append(rows, externalRow{Set: true, Day: p.TimeSlot.Day(), Pair: p.TimeSlot.PairNum(), Parity: p.Parity, Note: p.Note})
+	}
+	for k := 0; k < externalBlankRows; k++ {
+		rows = append(rows, externalRow{Parity: domain.Always})
+	}
+	return rows
+}
+
+// parseExternalPairs собирает строки таблицы «Пары на других факультетах». Строка без
+// дня пропускается; поля идут параллельными списками в порядке строк формы.
+func parseExternalPairs(r *http.Request) []domain.ExternalPair {
+	days, pairs := r.Form["ext_day"], r.Form["ext_pair"]
+	parities, notes := r.Form["ext_parity"], r.Form["ext_note"]
+	var out []domain.ExternalPair
+	for k, d := range days {
+		if d == "" || k >= len(pairs) {
+			continue
+		}
+		n, err := strconv.Atoi(pairs[k])
+		if err != nil {
+			continue
+		}
+		slot, err := domain.NewTimeSlot(domain.Day(d), n)
+		if err != nil {
+			continue
+		}
+		p := domain.Always
+		if k < len(parities) && domain.Parity(parities[k]).IsValid() {
+			p = domain.Parity(parities[k])
+		}
+		note := ""
+		if k < len(notes) {
+			note = strings.TrimSpace(notes[k])
+		}
+		out = append(out, domain.ExternalPair{TimeSlot: slot, Parity: p, Note: note})
+	}
+	return out
 }
 
 // parseUnavailable разбирает значения чекбоксов вида "monday:3" в TimeSlot.
@@ -96,6 +152,7 @@ func teacherFromForm(r *http.Request) domain.Teacher {
 		MaxWeeklyHours:     hours,
 		UnavailableSlots:   parseUnavailable(formStrings(r, "unavailable")),
 		PreferredBuildings: formStrings(r, "preferred_buildings"),
+		ExternalPairs:      parseExternalPairs(r),
 	}
 }
 
@@ -106,7 +163,7 @@ func (h *Handler) reTeachersForm(w http.ResponseWriter, r *http.Request, status 
 		return
 	}
 	renderStatus(w, r, status, h.pages["teachers_form.html"], teacherFormData{
-		Teacher: t, Departments: data.Departments, Buildings: data.Buildings,
+		Teacher: t, ExternalRows: externalRows(t.ExternalPairs), Departments: data.Departments, Buildings: data.Buildings,
 		Days: allDays, Pairs: allPairs, IsEdit: isEdit, Error: errMsg,
 	})
 }

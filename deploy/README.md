@@ -50,6 +50,17 @@ docker compose up -d       # запустить снова
 **Внимание:** `docker compose down -v` удаляет том с базой — все созданные расписания
 будут потеряны. При следующем запуске база создастся заново из `seed.sql`.
 
+## Обновление без потери данных
+
+Миграции применяются только при создании базы. Если база уже есть, новые миграции (они
+идемпотентны) накатываются вручную, расписания сохраняются:
+
+```bash
+for f in migrations/0003_*.sql migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql; do
+  docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U scheduler -d scheduler < "$f"
+done
+```
+
 ## Порт занят
 
 Поменять `APP_PORT` в `.env` и выполнить `docker compose up -d`.

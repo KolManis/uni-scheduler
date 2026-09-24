@@ -11,7 +11,7 @@
 # Тот же набор команд для PowerShell:  .\make.ps1 <команда>
 
 .DEFAULT_GOAL := help
-.PHONY: help up demo down fresh seed dev db db-reset logs ps test build clean package
+.PHONY: help up demo down fresh seed dev db db-reset db-migrate logs ps test build clean package
 
 DSN ?= postgres://postgres:postgres@127.0.0.1:5432/scheduler?sslmode=disable
 
@@ -43,6 +43,7 @@ help:
 	@echo "  make dev       Postgres в Docker, приложение локально через go run"
 	@echo "  make db        Поднять только postgres"
 	@echo "  make db-reset  Пересоздать БД с нуля, миграции применяются заново"
+	@echo "  make db-migrate Накатить новые миграции на существующую БД, данные сохраняются"
 	@echo ""
 	@echo "  make test      go build + go vet + go test — Definition of Done"
 	@echo "  make build     Собрать бинарник в bin/scheduler"
@@ -88,7 +89,15 @@ db:
 db-reset:
 	docker compose down -v
 	docker compose up -d --wait postgres
-	@echo DB recreated, migrations 0001/0003/0004/0005 applied.
+	@echo DB recreated, migrations 0001/0003/0004/0005/0006 applied.
+
+# Миграции 0003+ идемпотентны (IF NOT EXISTS) — их можно накатить на рабочую базу
+# без пересоздания тома, данные и расписания сохраняются.
+db-migrate: db
+	for f in migrations/0003_*.sql migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql; do \
+		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d scheduler < $$f || exit 1; \
+	done
+	@echo Migrations 0003-0006 applied.
 
 seed:
 	$(SEED_CMD)

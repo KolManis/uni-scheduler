@@ -18,6 +18,7 @@ services:
       - ./migrations/0003_add_semester_half_and_required_building.up.sql:/docker-entrypoint-initdb.d/003_add_semester_half_and_required_building.sql:ro
       - ./migrations/0004_add_unplaced_to_schedules.up.sql:/docker-entrypoint-initdb.d/004_add_unplaced_to_schedules.sql:ro
       - ./migrations/0005_add_schedule_options.up.sql:/docker-entrypoint-initdb.d/005_add_schedule_options.sql:ro
+      - ./migrations/0006_add_teacher_external_pairs.up.sql:/docker-entrypoint-initdb.d/006_add_teacher_external_pairs.sql:ro
 
   app:
     build:

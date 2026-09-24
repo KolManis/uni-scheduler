@@ -364,7 +364,7 @@ func (s *Service) PatchAssignment(ctx context.Context, schedID int64, idx int, r
 	// HC7: преподаватель доступен в новом слоте. Перенос меняет именно время,
 	// поэтому занятие может попасть в слот, отмеченный преподавателем как недоступный.
 	modified := sched.Assignments[idx]
-	if isTeacherUnavailable(data.Teachers, modified.TeacherID, modified.TimeSlot) {
+	if isTeacherUnavailable(data.Teachers, modified.TeacherID, modified.TimeSlot, modified.Parity) {
 		return nil, &ConflictError{Type: ConflictTeacherUnavailable, ResourceID: modified.TeacherID, ConflictWith: -1}
 	}
 
@@ -447,8 +447,9 @@ func validateSolverType(solverType string) error {
 	return fmt.Errorf("%w: solver_type %q не поддерживается, доступны \"teacher\" и \"dsatur\"", ErrInvalidInput, solverType)
 }
 
-// isTeacherUnavailable — слот входит в недоступные слоты преподавателя.
-func isTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot) bool {
+// isTeacherUnavailable — преподаватель в этом слоте недоступен или ведёт пару на другом
+// факультете в ту же неделю (чётность parity).
+func isTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot domain.TimeSlot, parity domain.Parity) bool {
 	for _, t := range teachers {
 		if t.ID != teacherID {
 			continue
@@ -458,7 +459,17 @@ func isTeacherUnavailable(teachers []domain.Teacher, teacherID string, slot doma
 				return true
 			}
 		}
+		for _, ep := range t.ExternalPairs {
+			if ep.TimeSlot == slot && weeksOverlap(ep.Parity, parity) {
+				return true
+			}
+		}
 		return false
 	}
 	return false
+}
+
+// weeksOverlap — пары с чётностями a и b идут хотя бы в одну общую неделю.
+func weeksOverlap(a, b domain.Parity) bool {
+	return a == "" || b == "" || a == domain.Always || b == domain.Always || a == b
 }

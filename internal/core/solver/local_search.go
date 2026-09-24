@@ -18,28 +18,41 @@ const (
 	localSearchMaxStagnation = 60
 )
 
-// teacherUnavailable — предвычисленные недоступные слоты преподавателей (HC7).
-// Строится один раз на запуск LocalSearch: checkHardConstraints вызывается в горячем
-// цикле O(n²) раз, и пересобирать карту на каждый вызов было бы непозволительно дорого.
-// nil/пустая карта означает "ограничений нет" — проверка тогда ничего не стоит.
-type teacherUnavailable map[string]map[domain.TimeSlot]bool
+// teacherUnavailable — предвычисленная занятость преподавателей извне (HC7): слот → в
+// какие недели преподаватель занят. Недоступные слоты заняты всегда; пары на других
+// факультетах — в свою чётность. Строится один раз на запуск LocalSearch:
+// checkHardConstraints вызывается в горячем цикле, пересобирать карту на каждый вызов
+// было бы дорого. nil/пустая карта означает "ограничений нет".
+type teacherUnavailable map[string]map[domain.TimeSlot]domain.Parity
 
 func buildTeacherUnavailable(input domain.InputData) teacherUnavailable {
 	var m teacherUnavailable
-	for _, t := range input.Teachers {
-		if len(t.UnavailableSlots) == 0 {
-			continue
-		}
+	add := func(tid string, s domain.TimeSlot, p domain.Parity) {
 		if m == nil {
 			m = make(teacherUnavailable)
 		}
-		slots := make(map[domain.TimeSlot]bool, len(t.UnavailableSlots))
-		for _, s := range t.UnavailableSlots {
-			slots[s] = true
+		if m[tid] == nil {
+			m[tid] = make(map[domain.TimeSlot]domain.Parity)
 		}
-		m[t.ID] = slots
+		if p == "" {
+			p = domain.Always
+		}
+		m[tid][s] = mergeParity(m[tid][s], p)
+	}
+	for _, t := range input.Teachers {
+		for _, s := range t.UnavailableSlots {
+			add(t.ID, s, domain.Always)
+		}
+		for _, ep := range t.ExternalPairs {
+			add(t.ID, ep.TimeSlot, ep.Parity)
+		}
 	}
 	return m
+}
+
+// paritiesOverlap — идут ли пары с чётностями a и b хотя бы в одну общую неделю.
+func paritiesOverlap(a, b domain.Parity) bool {
+	return (inWeek(a, domain.Even) && inWeek(b, domain.Even)) || (inWeek(a, domain.Odd) && inWeek(b, domain.Odd))
 }
 
 // ImproveAlgorithm — какой мета-эвристикой улучшать расписание после детерминированной
@@ -409,7 +422,7 @@ func checkHardConstraints(assignments []domain.Assignment, unavail teacherUnavai
 
 		// HC7: слот не должен быть отмечен преподавателем как недоступный
 		if len(unavail) > 0 {
-			if slots, ok := unavail[a.TeacherID]; ok && slots[a.TimeSlot] {
+			if busy, ok := unavail[a.TeacherID][a.TimeSlot]; ok && paritiesOverlap(busy, parity) {
 				return false
 			}
 		}

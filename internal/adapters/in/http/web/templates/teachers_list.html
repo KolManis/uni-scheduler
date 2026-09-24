@@ -8,7 +8,7 @@
 </div>
 {{if .Error}}<div class="banner error">{{.Error}}</div>{{end}}
 <table>
-  <thead><tr><th>ФИО</th><th>Кафедра</th><th>Часов/нед.</th><th>Недоступные пары</th><th>Корпуса</th><th></th></tr></thead>
+  <thead><tr><th>ФИО</th><th>Кафедра</th><th>Часов/нед.</th><th>Недоступные пары</th><th>Пары на других факультетах</th><th>Корпуса</th><th></th></tr></thead>
   <tbody>
     {{range .Teachers}}
     <tr>
@@ -16,6 +16,7 @@
       <td>{{departmentName $departments .DepartmentID}}</td>
       <td>{{.MaxWeeklyHours}}</td>
       <td>{{if .UnavailableSlots}}{{len .UnavailableSlots}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td>{{if .ExternalPairs}}{{len .ExternalPairs}}{{else}}<span class="muted">—</span>{{end}}</td>
       <td>
         {{range $i, $bid := .PreferredBuildings}}{{if $i}}, {{end}}{{buildingName $buildings $bid}}{{else}}<span class="muted">любой</span>{{end}}
       </td>
@@ -25,7 +26,7 @@
       </td>
     </tr>
     {{else}}
-    <tr><td colspan="6" class="muted">Пока нет ни одного преподавателя</td></tr>
+    <tr><td colspan="7" class="muted">Пока нет ни одного преподавателя</td></tr>
     {{end}}
   </tbody>
 </table>

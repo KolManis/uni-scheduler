@@ -41,6 +41,21 @@ func newTeacherState(input domain.InputData) *teacherState {
 	for _, sp := range input.SubjectPlans {
 		pk[sp.ID] = subjectKey(sp.Name)
 	}
+	// Пары преподавателей на других факультетах занимают их заранее, в свою чётность:
+	// построение обходит их так же, как уже поставленные пары (HC7).
+	occupiedTeachers := make(map[domain.TimeSlot]map[string]domain.Parity)
+	for _, t := range input.Teachers {
+		for _, ep := range t.ExternalPairs {
+			p := ep.Parity
+			if p == "" {
+				p = domain.Always
+			}
+			if occupiedTeachers[ep.TimeSlot] == nil {
+				occupiedTeachers[ep.TimeSlot] = make(map[string]domain.Parity)
+			}
+			occupiedTeachers[ep.TimeSlot][t.ID] = mergeParity(occupiedTeachers[ep.TimeSlot][t.ID], p)
+		}
+	}
 	return &teacherState{
 		input:            input,
 		teacherMap:       tm,
@@ -49,7 +64,7 @@ func newTeacherState(input domain.InputData) *teacherState {
 		assignments:      []domain.Assignment{},
 		subjectCount:     make(map[string]map[domain.ClassType]int),
 		occupiedGroups:   make(map[domain.TimeSlot]map[string]domain.Parity),
-		occupiedTeachers: make(map[domain.TimeSlot]map[string]domain.Parity),
+		occupiedTeachers: occupiedTeachers,
 		occupiedRooms:    make(map[domain.TimeSlot]map[string]domain.Parity),
 		teacherSlots:     make(map[string][]domain.TimeSlot),
 		planKeys:         pk,
@@ -556,11 +571,20 @@ func teacherFlexibility(state *teacherState, t domain.Teacher) float64 {
 	if need <= 0 {
 		return 1e9 // без нагрузки — максимально гибкий, в конец
 	}
-	available := totalSlots - len(t.UnavailableSlots)
+	// Пара на другом факультете «всегда» занимает слот целиком, по чётности — наполовину.
+	external := 0.0
+	for _, ep := range t.ExternalPairs {
+		if ep.Parity == domain.Even || ep.Parity == domain.Odd {
+			external += 0.5
+		} else {
+			external++
+		}
+	}
+	available := float64(totalSlots-len(t.UnavailableSlots)) - external
 	if available <= 0 {
 		return 0
 	}
-	return float64(available) / float64(need)
+	return available / float64(need)
 }
 
 // shuffleWithinBuckets перемешивает элементы уже отсортированного слайса, но только
