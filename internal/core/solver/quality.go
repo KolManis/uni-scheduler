@@ -59,6 +59,7 @@ func weekQuality(assignments []domain.Assignment) domain.QualityStats {
 			stats.MaxGroupPairsPerDay = n
 		}
 		stats.GroupGaps += gapsIn(pairs)
+		stats.GroupLongGaps += longGapsInSet(pairs)
 	}
 	for _, pairs := range teacherPairs {
 		if len(pairs) > stats.MaxTeacherPairsInDay {
@@ -78,4 +79,13 @@ func gapsIn(pairs map[int]bool) int {
 	}
 	sort.Ints(nums)
 	return nums[len(nums)-1] - nums[0] + 1 - len(nums)
+}
+
+func longGapsInSet(pairs map[int]bool) int {
+	nums := make([]int, 0, len(pairs))
+	for p := range pairs {
+		nums = append(nums, p)
+	}
+	sort.Ints(nums)
+	return longGapsIn(nums)
 }

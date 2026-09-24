@@ -38,7 +38,7 @@ func TestCalculateQuality(t *testing.T) {
 			}),
 		},
 		{
-			name: "пары 1 и 4 у группы — два окна в обе недели",
+			name: "пары 1 и 4 у группы — два окна подряд (одно длинное) в обе недели",
 			assignments: []domain.Assignment{
 				{
 					GroupIDs:  []string{"G1"},
@@ -54,6 +54,7 @@ func TestCalculateQuality(t *testing.T) {
 				},
 			},
 			want: both(domain.QualityStats{
+				GroupLongGaps:        1,
 				GroupGaps:            2,
 				MaxGroupPairsPerDay:  2,
 				MaxTeacherPairsInDay: 1,

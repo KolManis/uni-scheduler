@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("construct,method,run,score,gaps_even,gaps_odd,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds")
+	fmt.Println("construct,method,run,score,gaps_even,gaps_odd,long_gaps,single_even,single_odd,saturday_pairs,max_group_day,unplaced,seconds")
 	for _, b := range strings.Split(*builds, ",") {
 		construct, ok := solver.ParseConstruction(strings.TrimSpace(b))
 		if !ok {
@@ -65,8 +65,8 @@ func main() {
 				}
 				q := solver.CalculateQuality(sched.Assignments)
 				unplaced := len(solver.ComputeUnplaced(sched.Assignments, *data))
-				fmt.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f\n", construct, algo, run, sched.Score,
-					q.Even.GroupGaps, q.Odd.GroupGaps, q.Even.SingleClassDays, q.Odd.SingleClassDays,
+				fmt.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f\n", construct, algo, run, sched.Score,
+					q.Even.GroupGaps, q.Odd.GroupGaps, q.Even.GroupLongGaps+q.Odd.GroupLongGaps, q.Even.SingleClassDays, q.Odd.SingleClassDays,
 					q.Even.SaturdayPairs+q.Odd.SaturdayPairs,
 					max(q.Even.MaxGroupPairsPerDay, q.Odd.MaxGroupPairsPerDay),
 					unplaced, time.Since(start).Seconds())

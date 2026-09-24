@@ -106,6 +106,7 @@ type FitnessBreakdown struct {
 	TeacherGaps           int // окна у преподавателей
 	BuildingTransitions   int // переходы между корпусами вплотную/через окно
 	SingleClassDay        int // «форточка» — всего 1 пара в день у группы
+	GroupLongGaps         int // окно в 2+ пары подряд у группы — жёсткое ограничение HC8, штраф на случай, если построение не смогло иначе
 	PracticeBeforeLecture int // практика раньше лекции по предмету в неделе (если включено)
 	LecturePracticeApart  int // практика не в день лекции или раньше неё (если включено)
 	SubjectSpread         int // пары одного плана разнесены по разным дням (если включено)
@@ -115,13 +116,14 @@ type FitnessBreakdown struct {
 func (b FitnessBreakdown) Total() int {
 	return b.Saturday + b.GroupDayOverload + b.GroupLongDay + b.GroupTooFewDays +
 		b.TeacherDayOverload + b.TeacherConcentration + b.GroupGaps + b.TeacherGaps +
-		b.BuildingTransitions + b.SingleClassDay + b.PracticeBeforeLecture + b.LecturePracticeApart + b.SubjectSpread
+		b.BuildingTransitions + b.SingleClassDay + b.GroupLongGaps + b.PracticeBeforeLecture + b.LecturePracticeApart + b.SubjectSpread
 }
 
 // QualityStats — показатели расписания в «человеческих» единицах (штуки, пары),
 // а не в баллах штрафа. По ним видно, что именно плохо, без знания весов fitness.
 type QualityStats struct {
 	GroupGaps            int // окон у групп (пустых пар между занятиями за день)
+	GroupLongGaps        int // окон в 2+ пары подряд у групп (HC8: должно быть 0)
 	SingleClassDays      int // дней, где у группы ровно одна пара
 	SaturdayPairs        int // пар в субботу
 	MaxGroupPairsPerDay  int // максимум пар в день у одной группы

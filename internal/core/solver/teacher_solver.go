@@ -339,6 +339,9 @@ func weekSlotPenalty(state *teacherState, slot domain.TimeSlot, subject domain.S
 		if n > 0 {
 			all := append(existing, slot.PairNum())
 			gapPenalty += calcGaps(all)
+			sort.Ints(all)
+			// HC8: окно в 2+ пары подряд — только если другого слота нет.
+			groupLoadPenalty += longGapsIn(all) * longGapPenalty
 		}
 		// Пустой день дороже дня с одной парой: иначе построение раскидывает первые пары
 		// группы по разным дням и само создаёт дни с единственной парой, которые потом

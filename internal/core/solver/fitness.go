@@ -9,6 +9,29 @@ import (
 // teacherMaxPairsPerDay — сколько пар в день у преподавателя считается нормой.
 const teacherMaxPairsPerDay = 4
 
+const (
+	// groupGapPenalty — окно в одну пару у группы.
+	groupGapPenalty = 10000
+	// singleClassDayPenalty — день с одной парой у группы. Дороже окна в одну пару:
+	// ехать ради одной пары хуже, чем подождать пару между занятиями (ADR-0016).
+	singleClassDayPenalty = 12000
+	// longGapPenalty — окно в 2+ пары подряд (HC8). Улучшение такие окна не создаёт
+	// никогда, построение — только если пару иначе некуда поставить; штраф заставляет
+	// поиск убрать их в первую очередь.
+	longGapPenalty = 1_000_000
+)
+
+// longGapsIn — сколько в дне окон длиной 2+ пары подряд; pairs отсортированы.
+func longGapsIn(sorted []int) int {
+	n := 0
+	for i := 1; i < len(sorted); i++ {
+		if sorted[i]-sorted[i-1] > 2 {
+			n++
+		}
+	}
+	return n
+}
+
 // CalculateFitness — публичная обёртка для использования из других пакетов.
 func CalculateFitness(assignments []domain.Assignment, input domain.InputData) int {
 	return calculateFitness(assignments, input)
@@ -69,6 +92,7 @@ func averageBreakdown(even, odd domain.FitnessBreakdown) domain.FitnessBreakdown
 		TeacherGaps:          avg(even.TeacherGaps, odd.TeacherGaps),
 		BuildingTransitions:  avg(even.BuildingTransitions, odd.BuildingTransitions),
 		SingleClassDay:       avg(even.SingleClassDay, odd.SingleClassDay),
+		GroupLongGaps:        avg(even.GroupLongGaps, odd.GroupLongGaps),
 	}
 }
 
@@ -211,7 +235,8 @@ func weekBreakdown(assignments []domain.Assignment, input domain.InputData) doma
 				copy(sorted, slots)
 				sort.Ints(sorted)
 				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
-				b.GroupGaps += gaps * 10000
+				b.GroupGaps += gaps * groupGapPenalty
+				b.GroupLongGaps += longGapsIn(sorted) * longGapPenalty
 			}
 		}
 	}
@@ -281,15 +306,13 @@ func weekBreakdown(assignments []domain.Assignment, input domain.InputData) doma
 		}
 	}
 
-	// 7. Штраф за одну пару в день у группы — ехать ради одной пары.
-	// Должен быть меньше половины штрафа за окно (10000): иначе локальный поиск
-	// выгодно склеивает два одиночных дня в один день с окном (−2×штраф +10000),
-	// что для студентов не лучше. При 8000 так и происходило: окон стало в 10 раз
-	// больше, одиночных дней почти не убавилось.
+	// 7. Штраф за одну пару в день у группы — ехать ради одной пары. Дороже окна в одну
+	// пару (ADR-0016). Раньше был 4000 — меньше половины окна (ADR-0003), чтобы поиск не
+	// склеивал два одиночных дня через окно; теперь такая склейка считается улучшением.
 	for _, daySlots := range groupSlots {
 		for _, slots := range daySlots {
 			if len(slots) == 1 {
-				b.SingleClassDay += 4000
+				b.SingleClassDay += singleClassDayPenalty
 			}
 		}
 	}

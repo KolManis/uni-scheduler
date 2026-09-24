@@ -362,6 +362,14 @@ func (e *evaluator) apply(moves []move) ([]move, bool) {
 	}
 
 	undo := make([]move, len(moves))
+	// HC8 проверяется только для переносов между слотами: снятие и постановка снятых
+	// пар (LNS, вставка) могут временно открыть длинное окно, итог там судит score.
+	strict := true
+	for _, m := range moves {
+		if m.slot == unplacedSlot || e.slot[m.i] == unplacedSlot {
+			strict = false
+		}
+	}
 	e.stamp++
 	e.touchedG = e.touchedG[:0]
 	e.touchedT = e.touchedT[:0]
@@ -394,11 +402,23 @@ func (e *evaluator) apply(moves []move) ([]move, bool) {
 			}
 		}
 	}
+	longBefore := 0
 	for _, g := range e.touchedG {
+		longBefore += e.groups[g].contrib[0].GroupLongGaps + e.groups[g].contrib[1].GroupLongGaps
 		e.refreshGroup(g)
 	}
 	for _, t := range e.touchedT {
 		e.refreshTeacher(t)
+	}
+	if strict {
+		longAfter := 0
+		for _, g := range e.touchedG {
+			longAfter += e.groups[g].contrib[0].GroupLongGaps + e.groups[g].contrib[1].GroupLongGaps
+		}
+		if longAfter > longBefore {
+			e.apply(undo)
+			return nil, false
+		}
 	}
 	return undo, true
 }
@@ -436,6 +456,7 @@ func addBreakdown(dst *domain.FitnessBreakdown, src domain.FitnessBreakdown, sig
 	dst.TeacherGaps += sign * src.TeacherGaps
 	dst.BuildingTransitions += sign * src.BuildingTransitions
 	dst.SingleClassDay += sign * src.SingleClassDay
+	dst.GroupLongGaps += sign * src.GroupLongGaps
 }
 
 func (e *evaluator) refreshGroup(g int) {
@@ -505,6 +526,9 @@ func (e *evaluator) groupWeek(members []int, w int) domain.FitnessBreakdown {
 				if p-prev == 1 {
 					consecutive++
 				}
+				if p-prev > 2 {
+					b.GroupLongGaps += longGapPenalty
+				}
 				b1, b2 := building[d*6+prev], building[s]
 				if b1 != "" && b2 != "" && b1 != b2 {
 					switch p - prev {
@@ -536,10 +560,10 @@ func (e *evaluator) groupWeek(members []int, w int) domain.FitnessBreakdown {
 			}
 		}
 		if n >= 2 {
-			b.GroupGaps += ((last - first + 1) - n) * 10000
+			b.GroupGaps += ((last - first + 1) - n) * groupGapPenalty
 		}
 		if n == 1 {
-			b.SingleClassDay += 4000
+			b.SingleClassDay += singleClassDayPenalty
 		}
 	}
 	if total >= 4 && days < 2 {

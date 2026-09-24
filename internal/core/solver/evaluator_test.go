@@ -101,3 +101,19 @@ func TestLNS_KeepsAllPairs(t *testing.T) {
 		t.Fatalf("LNS ухудшил расписание: %d > %d", calculateFitness(got, input), sched.Score)
 	}
 }
+
+// TestEvaluator_NeverAddsLongGap — HC8: перенос, открывающий окно в 2+ пары, отвергается.
+func TestEvaluator_NeverAddsLongGap(t *testing.T) {
+	mk := func(teacher string, pair int) domain.Assignment {
+		return domain.Assignment{GroupIDs: []string{"G1"}, TeacherID: teacher, RoomID: "R" + teacher,
+			SubjectID: "S" + teacher, Type: domain.Practice, Parity: domain.Always,
+			TimeSlot: domain.MustNewTimeSlot(domain.Monday, pair)}
+	}
+	e := newEvaluator([]domain.Assignment{mk("T1", 1), mk("T2", 2)}, domain.InputData{}, nil)
+	if _, ok := e.relocate(1, slotIndex(domain.MustNewTimeSlot(domain.Monday, 4))); ok {
+		t.Fatal("перенос на 4-ю пару открыл бы окно в две пары и должен быть отвергнут")
+	}
+	if _, ok := e.relocate(1, slotIndex(domain.MustNewTimeSlot(domain.Monday, 3))); !ok {
+		t.Fatal("окно в одну пару допустимо")
+	}
+}

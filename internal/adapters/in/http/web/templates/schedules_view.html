@@ -24,6 +24,7 @@
     <thead><tr><th></th><th>Чётная неделя</th><th>Нечётная неделя</th></tr></thead>
     <tbody>
       <tr><td>Окна у групп</td><td class="{{if .Quality.Even.GroupGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.GroupGaps}}</td><td class="{{if .Quality.Odd.GroupGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.GroupGaps}}</td></tr>
+      <tr><td>Окна в 2+ пары подряд</td><td class="{{if .Quality.Even.GroupLongGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.GroupLongGaps}}</td><td class="{{if .Quality.Odd.GroupLongGaps}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.GroupLongGaps}}</td></tr>
       <tr><td>Дни с одной парой у группы</td><td class="{{if .Quality.Even.SingleClassDays}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.SingleClassDays}}</td><td class="{{if .Quality.Odd.SingleClassDays}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.SingleClassDays}}</td></tr>
       <tr><td>Пар в субботу</td><td class="{{if .Quality.Even.SaturdayPairs}}score-bad{{else}}score-good{{end}}">{{.Quality.Even.SaturdayPairs}}</td><td class="{{if .Quality.Odd.SaturdayPairs}}score-bad{{else}}score-good{{end}}">{{.Quality.Odd.SaturdayPairs}}</td></tr>
       <tr><td>Максимум пар в день у группы</td><td>{{.Quality.Even.MaxGroupPairsPerDay}}</td><td>{{.Quality.Odd.MaxGroupPairsPerDay}}</td></tr>
@@ -43,10 +44,11 @@
       <tr><td>Мало дней (группы)</td><td class="{{if .Breakdown.GroupTooFewDays}}score-bad{{end}}">{{.Breakdown.GroupTooFewDays}}</td><td>большая нагрузка втиснута в 1-2 дня</td></tr>
       <tr><td>Перегрузка дня (преподаватели)</td><td class="{{if .Breakdown.TeacherDayOverload}}score-bad{{end}}">{{.Breakdown.TeacherDayOverload}}</td><td>больше 4 пар в день у одного преподавателя (3–4 — норма)</td></tr>
       <tr><td>Концентрация (преподаватели)</td><td class="{{if .Breakdown.TeacherConcentration}}score-bad{{end}}">{{.Breakdown.TeacherConcentration}}</td><td>нагрузка не размазана по неделе (&lt;3 дней)</td></tr>
-      <tr><td>Окна у групп</td><td class="{{if .Breakdown.GroupGaps}}score-bad{{end}}">{{.Breakdown.GroupGaps}}</td><td><b>самое дорогое</b>: 10000 за каждое «окно» между парами группы за день</td></tr>
+      <tr><td>Окна в 2+ пары подряд</td><td class="{{if .Breakdown.GroupLongGaps}}score-bad{{end}}">{{.Breakdown.GroupLongGaps}}</td><td>жёсткое ограничение: 1 000 000 за окно, если построению было некуда деться</td></tr>
+      <tr><td>Окна у групп</td><td class="{{if .Breakdown.GroupGaps}}score-bad{{end}}">{{.Breakdown.GroupGaps}}</td><td>10000 за каждое «окно» между парами группы за день</td></tr>
       <tr><td>Окна у преподавателей</td><td class="{{if .Breakdown.TeacherGaps}}score-bad{{end}}">{{.Breakdown.TeacherGaps}}</td><td>то же самое, но для преподавателя (дешевле)</td></tr>
       <tr><td>Переходы между корпусами</td><td class="{{if .Breakdown.BuildingTransitions}}score-bad{{end}}">{{.Breakdown.BuildingTransitions}}</td><td>занятия группы подряд в разных корпусах</td></tr>
-      <tr><td>«Форточка»</td><td class="{{if .Breakdown.SingleClassDay}}score-bad{{end}}">{{.Breakdown.SingleClassDay}}</td><td>всего 1 пара в день у группы</td></tr>
+      <tr><td>«Форточка»</td><td class="{{if .Breakdown.SingleClassDay}}score-bad{{end}}">{{.Breakdown.SingleClassDay}}</td><td><b>самое дорогое</b> из обычных: 12000 за день, когда у группы всего 1 пара</td></tr>
       {{if .Schedule.Options.LecturePracticeSameDay}}<tr><td>Практика не в день лекции</td><td class="{{if .Breakdown.LecturePracticeApart}}score-bad{{end}}">{{.Breakdown.LecturePracticeApart}}</td><td>практика или лабораторная не стоит в тот же день после лекции по предмету</td></tr>{{end}}
       {{if .Schedule.Options.LectureBeforePractice}}<tr><td>Практика раньше лекции</td><td class="{{if .Breakdown.PracticeBeforeLecture}}score-bad{{end}}">{{.Breakdown.PracticeBeforeLecture}}</td><td>практика или лабораторная стоит в неделе раньше лекции по предмету</td></tr>{{end}}
       {{if .Schedule.Options.SameSubjectSameDay}}<tr><td>Предмет в разные дни</td><td class="{{if .Breakdown.SubjectSpread}}score-bad{{end}}">{{.Breakdown.SubjectSpread}}</td><td>пары одного предмета у группы разнесены по разным дням</td></tr>{{end}}

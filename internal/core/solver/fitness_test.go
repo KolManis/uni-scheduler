@@ -158,12 +158,12 @@ func TestCalculateFitness_GapPenalty(t *testing.T) {
 }
 
 func TestCalculateFitness_SinglePairWindow(t *testing.T) {
-	// Одна пара в день у группы — штраф 4000, меньше половины штрафа за окно.
+	// Одна пара в день у группы — штраф 12000, дороже окна в одну пару (ADR-0016).
 	assignments := []domain.Assignment{
 		makeAssignment("G1", "T1", domain.Wednesday, 3, domain.Always),
 	}
 	score := calculateFitness(assignments, emptyInput)
-	if score != 4000 {
-		t.Fatalf("expected single-pair penalty 4000, got %d", score)
+	if score != 12000 {
+		t.Fatalf("expected single-pair penalty 12000, got %d", score)
 	}
 }
