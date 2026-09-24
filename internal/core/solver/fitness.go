@@ -1,36 +1,8 @@
 package solver
 
 import (
-	"sort"
-
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 )
-
-// teacherMaxPairsPerDay — сколько пар в день у преподавателя считается нормой.
-const teacherMaxPairsPerDay = 4
-
-const (
-	// groupGapPenalty — окно в одну пару у группы.
-	groupGapPenalty = 10000
-	// singleClassDayPenalty — день с одной парой у группы. Дороже окна в одну пару:
-	// ехать ради одной пары хуже, чем подождать пару между занятиями (ADR-0016).
-	singleClassDayPenalty = 12000
-	// longGapPenalty — окно в 2+ пары подряд (HC8). Улучшение такие окна не создаёт
-	// никогда, построение — только если пару иначе некуда поставить; штраф заставляет
-	// поиск убрать их в первую очередь.
-	longGapPenalty = 1_000_000
-)
-
-// longGapsIn — сколько в дне окон длиной 2+ пары подряд; pairs отсортированы.
-func longGapsIn(sorted []int) int {
-	n := 0
-	for i := 1; i < len(sorted); i++ {
-		if sorted[i]-sorted[i-1] > 2 {
-			n++
-		}
-	}
-	return n
-}
 
 // CalculateFitness — публичная обёртка для использования из других пакетов.
 func CalculateFitness(assignments []domain.Assignment, input domain.InputData) int {
@@ -96,226 +68,47 @@ func averageBreakdown(even, odd domain.FitnessBreakdown) domain.FitnessBreakdown
 	}
 }
 
-// weekBreakdown — штрафы одной учебной недели. На вход — только пары, которые идут
-// в эту неделю (см. assignmentsInWeek), поэтому пар с разной чётностью в одном слоте
-// здесь быть не может.
+// weekBreakdown — штрафы одной учебной недели. На вход — только пары этой недели
+// (assignmentsInWeek): неделя каждой группы и преподавателя собирается в week, а штрафы
+// считают общие правила из penalties.go.
 func weekBreakdown(assignments []domain.Assignment, input domain.InputData) domain.FitnessBreakdown {
-	var b domain.FitnessBreakdown
-
-	groupSlots := make(map[string]map[domain.Day][]int)
-	teacherSlots := make(map[string]map[domain.Day][]int)
-
-	// Дедупликация по (group, day, pairNum). Внутри одной недели у группы не может быть
-	// двух пар в одном слоте (жёсткое ограничение), это страховка.
-	type slotKey struct {
-		id  string
-		day domain.Day
-		num int
-	}
-	seenGroup := make(map[slotKey]bool)
-	seenTeacher := make(map[slotKey]bool)
-
-	for _, a := range assignments {
-		for _, gid := range a.GroupIDs {
-			k := slotKey{gid, a.TimeSlot.Day(), a.TimeSlot.PairNum()}
-			if !seenGroup[k] {
-				seenGroup[k] = true
-				if groupSlots[gid] == nil {
-					groupSlots[gid] = make(map[domain.Day][]int)
-				}
-				groupSlots[gid][a.TimeSlot.Day()] = append(
-					groupSlots[gid][a.TimeSlot.Day()],
-					a.TimeSlot.PairNum(),
-				)
-			}
-		}
-
-		k := slotKey{a.TeacherID, a.TimeSlot.Day(), a.TimeSlot.PairNum()}
-		if !seenTeacher[k] {
-			seenTeacher[k] = true
-			if teacherSlots[a.TeacherID] == nil {
-				teacherSlots[a.TeacherID] = make(map[domain.Day][]int)
-			}
-			teacherSlots[a.TeacherID][a.TimeSlot.Day()] = append(
-				teacherSlots[a.TeacherID][a.TimeSlot.Day()],
-				a.TimeSlot.PairNum(),
-			)
-		}
-	}
-
-	// 1. Штраф за субботу + одиночная суббота у группы
-	satGroupCount := make(map[string]int)
-	for _, a := range assignments {
-		if a.TimeSlot.Day() == domain.Saturday {
-			b.Saturday += 200
-			for _, gid := range a.GroupIDs {
-				satGroupCount[gid]++
-			}
-		}
-	}
-	for _, cnt := range satGroupCount {
-		if cnt == 1 {
-			b.Saturday += 8000 // одна пара в субботу — нежелательно
-		}
-	}
-
-	// 1b. Штраф за перегрузку дня у группы (видимый для or-opt)
-	for _, daySlots := range groupSlots {
-		for _, slots := range daySlots {
-			n := len(slots)
-			switch {
-			case n >= 5:
-				b.GroupDayOverload += (n-4)*4000 + 2000
-			case n == 4:
-				b.GroupDayOverload += 800
-			}
-		}
-	}
-
-	// 2. Штраф за длинный день (>4 пар)
-	for _, daySlots := range groupSlots {
-		for _, slots := range daySlots {
-			if len(slots) > 4 {
-				sorted := make([]int, len(slots))
-				copy(sorted, slots)
-				sort.Ints(sorted)
-
-				consecutive := 0
-				for i := 0; i < len(sorted)-1; i++ {
-					if sorted[i+1]-sorted[i] == 1 {
-						consecutive++
-					}
-				}
-				if consecutive >= 4 {
-					b.GroupLongDay += 500
-				} else if len(slots) >= 5 {
-					b.GroupLongDay += 300
-				}
-			}
-		}
-	}
-
-	// 3. Штраф за слишком мало дней (группы)
-	for _, daySlots := range groupSlots {
-		totalPairs := 0
-		for _, slots := range daySlots {
-			totalPairs += len(slots)
-		}
-		if totalPairs >= 4 && len(daySlots) < 2 {
-			b.GroupTooFewDays += 600
-		} else if totalPairs >= 4 && len(daySlots) < 3 {
-			b.GroupTooFewDays += 200
-		}
-	}
-
-	// 3b. Нагрузка преподавателей. 3–4 пары в день — норма; каждая пара сверх
-	// teacherMaxPairsPerDay — перегрузка. Раньше штраф начинался с 3-й пары и вместе
-	// со штрафами групп растаскивал занятия по неделе, порождая дни с одной парой.
-	for _, daySlots := range teacherSlots {
-		for _, slots := range daySlots {
-			if len(slots) > teacherMaxPairsPerDay {
-				b.TeacherDayOverload += (len(slots) - teacherMaxPairsPerDay) * 3000
-			}
-		}
-		// Штраф за концентрацию: если кол-во активных дней < 3 при >=4 парах в неделю
-		totalPairs := 0
-		for _, slots := range daySlots {
-			totalPairs += len(slots)
-		}
-		if totalPairs >= 4 && len(daySlots) < 3 {
-			b.TeacherConcentration += (3 - len(daySlots)) * 400
-		}
-	}
-
-	// 4. Штраф за окна у групп
-	for _, daySlots := range groupSlots {
-		for _, slots := range daySlots {
-			if len(slots) >= 2 {
-				sorted := make([]int, len(slots))
-				copy(sorted, slots)
-				sort.Ints(sorted)
-				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
-				b.GroupGaps += gaps * groupGapPenalty
-				b.GroupLongGaps += longGapsIn(sorted) * longGapPenalty
-			}
-		}
-	}
-
-	// 5. Штраф за окна у преподавателей
-	for _, daySlots := range teacherSlots {
-		for _, slots := range daySlots {
-			if len(slots) >= 2 {
-				sorted := make([]int, len(slots))
-				copy(sorted, slots)
-				sort.Ints(sorted)
-				gaps := (sorted[len(sorted)-1] - sorted[0] + 1) - len(slots)
-				b.TeacherGaps += gaps * 60
-			}
-		}
-	}
-
-	// 6. Штраф за переходы между корпусами.
-	// Строим map (gid, day, pairNum) → buildingID за один проход вместо O(n³).
-	type gSlotKey struct {
-		gid string
-		day domain.Day
-		num int
-	}
-	// Спортивные места (зал, стадион) в переходах не участвуют — см. isSportRoomType.
 	sportRooms := make(map[string]bool)
 	for _, r := range input.Rooms {
 		if isSportRoomType(r.Type) {
 			sportRooms[r.ID] = true
 		}
 	}
-	groupBuilding := make(map[gSlotKey]string, len(assignments)*2)
+
+	groups := map[string]*week{}
+	teachers := map[string]*week{}
+	weekOf := func(m map[string]*week, id string) *week {
+		if m[id] == nil {
+			m[id] = &week{}
+		}
+		return m[id]
+	}
+
+	var b domain.FitnessBreakdown
 	for _, a := range assignments {
+		slot := slotIndex(a.TimeSlot)
+		building := a.BuildingID
 		if sportRooms[a.RoomID] {
-			continue
+			building = "" // спортзал и стадион не участвуют в переходах между корпусами
 		}
 		for _, gid := range a.GroupIDs {
-			k := gSlotKey{gid, a.TimeSlot.Day(), a.TimeSlot.PairNum()}
-			if groupBuilding[k] == "" {
-				groupBuilding[k] = a.BuildingID
-			}
+			weekOf(groups, gid).add(slot, building)
 		}
-	}
-	for gid, daySlots := range groupSlots {
-		for day, slots := range daySlots {
-			if len(slots) < 2 {
-				continue
-			}
-			sorted := make([]int, len(slots))
-			copy(sorted, slots)
-			sort.Ints(sorted)
-
-			for i := 0; i < len(sorted)-1; i++ {
-				b1 := groupBuilding[gSlotKey{gid, day, sorted[i]}]
-				b2 := groupBuilding[gSlotKey{gid, day, sorted[i+1]}]
-				if b1 == "" || b2 == "" || b1 == b2 {
-					continue
-				}
-				diff := sorted[i+1] - sorted[i]
-				switch diff {
-				case 1: // вплотную — критичный переход
-					b.BuildingTransitions += 2000
-				case 2: // через одно окно — есть время добраться
-					b.BuildingTransitions += 700
-				}
-			}
+		weekOf(teachers, a.TeacherID).add(slot, "")
+		if a.TimeSlot.Day() == domain.Saturday {
+			b.Saturday += saturdayPairPenalty
 		}
 	}
 
-	// 7. Штраф за одну пару в день у группы — ехать ради одной пары. Дороже окна в одну
-	// пару (ADR-0016). Раньше был 4000 — меньше половины окна (ADR-0003), чтобы поиск не
-	// склеивал два одиночных дня через окно; теперь такая склейка считается улучшением.
-	for _, daySlots := range groupSlots {
-		for _, slots := range daySlots {
-			if len(slots) == 1 {
-				b.SingleClassDay += singleClassDayPenalty
-			}
-		}
+	for _, w := range groups {
+		addBreakdown(&b, groupPenalties(w), 1)
 	}
-
+	for _, w := range teachers {
+		addBreakdown(&b, teacherPenalties(w), 1)
+	}
 	return b
 }

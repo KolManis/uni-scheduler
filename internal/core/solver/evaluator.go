@@ -265,8 +265,8 @@ func (e *evaluator) score() int {
 
 func (e *evaluator) breakdown() domain.FitnessBreakdown {
 	even, odd := e.week[0], e.week[1]
-	even.Saturday += 200 * e.satCount[0]
-	odd.Saturday += 200 * e.satCount[1]
+	even.Saturday += saturdayPairPenalty * e.satCount[0]
+	odd.Saturday += saturdayPairPenalty * e.satCount[1]
 	b := averageBreakdown(even, odd)
 	b.PracticeBeforeLecture = e.pref.PracticeBeforeLecture
 	b.LecturePracticeApart = e.pref.LecturePracticeApart
@@ -492,132 +492,32 @@ func (e *evaluator) refreshTeacher(t int) {
 	}
 }
 
-// groupWeek — штрафы одной группы в неделю w; те же правила, что в weekBreakdown.
+// groupWeek — штрафы одной группы в неделю w: собрать её неделю и применить правила.
 func (e *evaluator) groupWeek(members []int, w int) domain.FitnessBreakdown {
-	var b domain.FitnessBreakdown
-	var busy [numSlots]bool
-	var building [numSlots]string
-	sat := 0
+	var wk week
 	for _, i := range members {
 		s := e.slot[i]
 		if s == unplacedSlot || !e.info[i].weeks[w] {
 			continue
 		}
-		busy[s] = true
-		if r := e.rooms[e.info[i].room]; !r.sport && building[s] == "" {
-			building[s] = e.asg[i].BuildingID
+		building := e.asg[i].BuildingID
+		if e.rooms[e.info[i].room].sport {
+			building = "" // спортзал и стадион не участвуют в переходах между корпусами
 		}
-		if s/6 == saturdayIdx {
-			sat++
-		}
+		wk.add(s, building)
 	}
-	if sat == 1 {
-		b.Saturday += 8000
-	}
-
-	days, total := 0, 0
-	for d := 0; d < 6; d++ {
-		n, first, last, consecutive, prev := 0, -1, -1, 0, -1
-		for p := 0; p < 6; p++ {
-			s := d*6 + p
-			if !busy[s] {
-				continue
-			}
-			n++
-			if first < 0 {
-				first = p
-			}
-			last = p
-			if prev >= 0 {
-				if p-prev == 1 {
-					consecutive++
-				}
-				if p-prev > 2 {
-					b.GroupLongGaps += longGapPenalty
-				}
-				b1, b2 := building[d*6+prev], building[s]
-				if b1 != "" && b2 != "" && b1 != b2 {
-					switch p - prev {
-					case 1:
-						b.BuildingTransitions += 2000
-					case 2:
-						b.BuildingTransitions += 700
-					}
-				}
-			}
-			prev = p
-		}
-		if n == 0 {
-			continue
-		}
-		days++
-		total += n
-		switch {
-		case n >= 5:
-			b.GroupDayOverload += (n-4)*4000 + 2000
-		case n == 4:
-			b.GroupDayOverload += 800
-		}
-		if n > 4 {
-			if consecutive >= 4 {
-				b.GroupLongDay += 500
-			} else {
-				b.GroupLongDay += 300
-			}
-		}
-		if n >= 2 {
-			b.GroupGaps += ((last - first + 1) - n) * groupGapPenalty
-		}
-		if n == 1 {
-			b.SingleClassDay += singleClassDayPenalty
-		}
-	}
-	if total >= 4 && days < 2 {
-		b.GroupTooFewDays += 600
-	} else if total >= 4 && days < 3 {
-		b.GroupTooFewDays += 200
-	}
-	return b
+	return groupPenalties(&wk)
 }
 
 // teacherWeek — штрафы одного преподавателя в неделю w.
 func (e *evaluator) teacherWeek(members []int, w int) domain.FitnessBreakdown {
-	var b domain.FitnessBreakdown
-	var busy [numSlots]bool
+	var wk week
 	for _, i := range members {
 		if s := e.slot[i]; s != unplacedSlot && e.info[i].weeks[w] {
-			busy[s] = true
+			wk.add(s, "")
 		}
 	}
-	days, total := 0, 0
-	for d := 0; d < 6; d++ {
-		n, first, last := 0, -1, -1
-		for p := 0; p < 6; p++ {
-			if !busy[d*6+p] {
-				continue
-			}
-			n++
-			if first < 0 {
-				first = p
-			}
-			last = p
-		}
-		if n == 0 {
-			continue
-		}
-		days++
-		total += n
-		if n > teacherMaxPairsPerDay {
-			b.TeacherDayOverload += (n - teacherMaxPairsPerDay) * 3000
-		}
-		if n >= 2 {
-			b.TeacherGaps += ((last - first + 1) - n) * 60
-		}
-	}
-	if total >= 4 && days < 3 {
-		b.TeacherConcentration += (3 - days) * 400
-	}
-	return b
+	return teacherPenalties(&wk)
 }
 
 // groupPref — штрафы необязательных правил, относящиеся к одной группе.
