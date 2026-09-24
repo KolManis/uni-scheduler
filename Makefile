@@ -94,10 +94,10 @@ db-reset:
 # Миграции 0003+ идемпотентны (IF NOT EXISTS) — их можно накатить на рабочую базу
 # без пересоздания тома, данные и расписания сохраняются.
 db-migrate: db
-	for f in migrations/0003_*.sql migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql; do \
+	for f in migrations/0003_*.sql migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql migrations/0007_*.sql migrations/0008_*.sql; do \
 		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d scheduler < $$f || exit 1; \
 	done
-	@echo Migrations 0003-0006 applied.
+	@echo Migrations 0003-0008 applied.
 
 seed:
 	$(SEED_CMD)

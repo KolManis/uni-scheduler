@@ -102,17 +102,17 @@ switch ($Target.ToLower()) {
     "db-reset" {
         Run "docker" @("compose", "down", "-v")
         Run "docker" @("compose", "up", "-d", "--wait", "postgres")
-        Write-Host "БД пересоздана, миграции 0001/0003/0004/0005/0006 применены." -ForegroundColor Green
+        Write-Host "БД пересоздана, миграции 0001/0003-0008 применены." -ForegroundColor Green
     }
 
     # Миграции 0003+ идемпотентны (IF NOT EXISTS): накатываются на рабочую базу без потери данных.
     "db-migrate" {
         Run "docker" @("compose", "up", "-d", "--wait", "postgres")
-        foreach ($f in Get-ChildItem migrations -Filter "000[3-6]_*.sql" | Sort-Object Name) {
+        foreach ($f in Get-ChildItem migrations -Filter "000[3-8]_*.sql" | Sort-Object Name) {
             Get-Content $f.FullName -Raw -Encoding UTF8 | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d scheduler
             if ($LASTEXITCODE -ne 0) { throw "миграция $($f.Name) не применилась" }
         }
-        Write-Host "Миграции 0003-0006 применены." -ForegroundColor Green
+        Write-Host "Миграции 0003-0008 применены." -ForegroundColor Green
     }
 
     "seed"     { Invoke-Seed }

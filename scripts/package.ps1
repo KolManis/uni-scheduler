@@ -61,7 +61,9 @@ Copy-Item migrations\0001_init.up.sql, `
           migrations\0003_add_semester_half_and_required_building.up.sql, `
           migrations\0004_add_unplaced_to_schedules.up.sql, `
           migrations\0005_add_schedule_options.up.sql, `
-          migrations\0006_add_teacher_external_pairs.up.sql (Join-Path $out 'migrations')
+          migrations\0006_add_teacher_external_pairs.up.sql, `
+          migrations\0007_add_teacher_undesired_slots.up.sql, `
+          migrations\0008_add_schedule_run.up.sql (Join-Path $out 'migrations')
 Set-Content -Path (Join-Path $out 'VERSION') -Value $version -Encoding ascii
 
 Step 'Архив dist/uni-scheduler.tar.gz'
