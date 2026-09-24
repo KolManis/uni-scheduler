@@ -9,7 +9,7 @@ type GenerateRequest struct {
 	TimeoutSec             int                 `json:"timeout_sec"`
 	SemesterHalf           domain.SemesterHalf `json:"semester_half"`    // "" | "first" | "second"
 	ImproveAlgo            string              `json:"improve_algo"`     // "hillclimb" | "sa" | "tabu" | "ga" | "lns"
-	ParallelStarts         int                 `json:"parallel_starts"`  // 0/1 — один запуск, N>1 — многостартовый
+	ParallelStarts         int                 `json:"parallel_starts"`  // 0 — по умолчанию (4), 1 — один запуск, N>1 — лучший из N
 	BaseScheduleID         int64               `json:"base_schedule_id"` // перегенерация: закреплённые пары этого расписания остаются
 	LectureBeforePractice  bool                `json:"lecture_before_practice"`
 	LecturePracticeSameDay bool                `json:"lecture_practice_same_day"`

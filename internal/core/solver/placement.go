@@ -134,7 +134,13 @@ func slotPenalty(draft *scheduleDraft, slot domain.TimeSlot, subject domain.Subj
 
 	prefPenalty := preferenceSlotPenalty(draft, subject, classType, slot, groupIDs)
 
-	return satPenalty + weekSum/2 + globalSpread + prefPenalty
+	// Нежелательное время преподавателя — тот же штраф, что в оценке.
+	undesired := 0
+	if draft.undesired[teacherID][slotIndex(slot)] {
+		undesired = teacherUndesiredPenalty
+	}
+
+	return satPenalty + weekSum/2 + globalSpread + prefPenalty + undesired
 }
 
 // weekSlotPenalty — штраф слота для групп и преподавателя в одну учебную неделю:

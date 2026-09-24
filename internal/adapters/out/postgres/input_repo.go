@@ -84,7 +84,7 @@ func (r *InputRepository) LoadInput(ctx context.Context) (*domain.InputData, err
 
 	// Преподаватели
 	rows4, err := r.pool.Query(ctx, `
-		SELECT id, name, department_id, max_weekly_hours, unavailable_slots, preferred_buildings, external_pairs
+		SELECT id, name, department_id, max_weekly_hours, unavailable_slots, preferred_buildings, external_pairs, undesired_slots
 		FROM teachers
 	`)
 	if err != nil {
@@ -93,15 +93,18 @@ func (r *InputRepository) LoadInput(ctx context.Context) (*domain.InputData, err
 	defer rows4.Close()
 	for rows4.Next() {
 		var t domain.Teacher
-		var uslotsJSON, pbJSON, extJSON []byte
+		var uslotsJSON, pbJSON, extJSON, undJSON []byte
 		if err := rows4.Scan(&t.ID, &t.Name, &t.DepartmentID, &t.MaxWeeklyHours,
-			&uslotsJSON, &pbJSON, &extJSON); err != nil {
+			&uslotsJSON, &pbJSON, &extJSON, &undJSON); err != nil {
 			return nil, err
 		}
 		if err := decodeJSON(uslotsJSON, &t.UnavailableSlots, "teacher "+t.ID+" unavailable_slots"); err != nil {
 			return nil, err
 		}
 		if err := decodeJSON(pbJSON, &t.PreferredBuildings, "teacher "+t.ID+" preferred_buildings"); err != nil {
+			return nil, err
+		}
+		if err := decodeJSON(undJSON, &t.UndesiredSlots, "teacher "+t.ID+" undesired_slots"); err != nil {
 			return nil, err
 		}
 		if err := decodeJSON(extJSON, &t.ExternalPairs, "teacher "+t.ID+" external_pairs"); err != nil {

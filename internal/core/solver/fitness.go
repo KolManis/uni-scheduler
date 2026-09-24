@@ -92,7 +92,9 @@ func weekBreakdown(assignments []domain.Assignment, input domain.InputData) doma
 	for _, w := range groups {
 		addBreakdown(&b, groupPenalties(w), 1)
 	}
-	for _, w := range teachers {
+	undesired := undesiredSlots(input)
+	for id, w := range teachers {
+		w.undesired = undesired[id]
 		addBreakdown(&b, teacherPenalties(w), 1)
 	}
 	return b

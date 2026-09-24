@@ -74,7 +74,7 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 		Saturday:             16400,
 		GroupDayOverload:     0,
 		GroupLongDay:         0,
-		GroupTooFewDays:      400,
+		GroupTooFewDays:      0, // 4 пары в 2 дня — не нарушение (ADR-0022)
 		TeacherDayOverload:   0,
 		TeacherConcentration: 0,
 		GroupGaps:            80000,
@@ -89,8 +89,8 @@ func TestGolden_FitnessBreakdown(t *testing.T) {
 	if got != want {
 		t.Errorf("разбивка штрафа изменилась\nполучено: %+v\nожидалось: %+v", got, want)
 	}
-	if got.Total() != 2149100 {
-		t.Errorf("итоговый штраф: получено %d, ожидалось 2149100", got.Total())
+	if got.Total() != 2148700 {
+		t.Errorf("итоговый штраф: получено %d, ожидалось 2148700", got.Total())
 	}
 }
 
@@ -119,8 +119,8 @@ func TestGolden_Converge(t *testing.T) {
 	if gotRender := renderSchedule(got); gotRender != want {
 		t.Errorf("результат сходимости изменился\nполучено:\n%s\n\nожидалось:\n%s", gotRender, want)
 	}
-	if score := calculateFitness(got, domain.InputData{}); score != 7200 {
-		t.Errorf("штраф после сходимости: получено %d, ожидалось 7200", score)
+	if score := calculateFitness(got, domain.InputData{}); score != 6800 {
+		t.Errorf("штраф после сходимости: получено %d, ожидалось 6800", score)
 	}
 	if !checkHardConstraints(got, nil) {
 		t.Error("сходимость нарушила жёсткие ограничения")

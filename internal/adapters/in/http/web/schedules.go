@@ -359,7 +359,7 @@ func (h *Handler) schedulesGenerate(w http.ResponseWriter, r *http.Request) {
 		TimeoutSec:     atoi(r.FormValue("timeout_sec"), 30),
 		SemesterHalf:   domain.SemesterHalf(r.FormValue("semester_half")),
 		ImproveAlgo:    r.FormValue("improve_algo"),
-		ParallelStarts: atoi(r.FormValue("parallel_starts"), 1),
+		ParallelStarts: atoi(r.FormValue("parallel_starts"), 0),
 		Preferences: domain.SolverPreferences{
 			LectureBeforePractice:  r.FormValue("lecture_before_practice") != "",
 			LecturePracticeSameDay: r.FormValue("lecture_practice_same_day") != "",

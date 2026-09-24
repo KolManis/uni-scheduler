@@ -49,8 +49,10 @@ type evaluator struct {
 
 	groups   []ownerCache // пары и штраф каждой группы
 	teachers []ownerCache // пары и штраф каждого преподавателя
-	roomIDs  []string     // номер аудитории → её ID
-	rooms    []roomInfo   // номер аудитории → корпус, спортзал ли
+	// teacherUndesired — нежелательные слоты каждого преподавателя (по номеру).
+	teacherUndesired [][numSlots]bool
+	roomIDs          []string   // номер аудитории → её ID
+	rooms            []roomInfo // номер аудитории → корпус, спортзал ли
 
 	saturdayPairs [2]int                     // пар в субботу по неделям (по 200 за каждую)
 	week          [2]domain.FitnessBreakdown // сумма штрафов всех групп и преподавателей по неделям
@@ -240,6 +242,12 @@ func newEvaluatorWithPending(placed, pending []domain.Assignment, input domain.I
 	e.roomOcc = make([][numSlots][2]uint8, len(roomIdx))
 	e.groups = make([]ownerCache, len(groupIdx))
 	e.teachers = make([]ownerCache, len(teacherIdx))
+	e.teacherUndesired = make([][numSlots]bool, len(teacherIdx))
+	for id, mask := range undesiredSlots(input) {
+		if t, ok := teacherIdx[id]; ok {
+			e.teacherUndesired[t] = mask
+		}
+	}
 	e.groupSeenAt = make([]int, len(groupIdx))
 	e.teacherSeenAt = make([]int, len(teacherIdx))
 
@@ -523,6 +531,8 @@ func addBreakdown(dst *domain.FitnessBreakdown, src domain.FitnessBreakdown, sig
 	dst.GroupDayOverload += sign * src.GroupDayOverload
 	dst.GroupLongDay += sign * src.GroupLongDay
 	dst.GroupTooFewDays += sign * src.GroupTooFewDays
+	dst.GroupUnevenWeek += sign * src.GroupUnevenWeek
+	dst.TeacherUndesired += sign * src.TeacherUndesired
 	dst.TeacherDayOverload += sign * src.TeacherDayOverload
 	dst.TeacherConcentration += sign * src.TeacherConcentration
 	dst.GroupGaps += sign * src.GroupGaps
@@ -557,7 +567,7 @@ func (e *evaluator) refreshTeacher(t int) {
 	c := &e.teachers[t]
 	for w := 0; w < 2; w++ {
 		addBreakdown(&e.week[w], c.penalty[w], -1)
-		c.penalty[w] = e.teacherWeek(c.members, w)
+		c.penalty[w] = e.teacherWeek(t, w)
 		addBreakdown(&e.week[w], c.penalty[w], 1)
 	}
 }
@@ -580,9 +590,9 @@ func (e *evaluator) groupWeek(members []int, w int) domain.FitnessBreakdown {
 }
 
 // teacherWeek — штрафы одного преподавателя в неделю w.
-func (e *evaluator) teacherWeek(members []int, w int) domain.FitnessBreakdown {
-	var wk week
-	for _, i := range members {
+func (e *evaluator) teacherWeek(t, w int) domain.FitnessBreakdown {
+	wk := week{undesired: e.teacherUndesired[t]}
+	for _, i := range e.teachers[t].members {
 		if s := e.slot[i]; s != unplacedSlot && e.info[i].weeks[w] {
 			wk.add(s, "")
 		}

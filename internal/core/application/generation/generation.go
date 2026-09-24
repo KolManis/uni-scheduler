@@ -19,13 +19,19 @@ type Request struct {
 	TimeoutSec   int                 // сколько ждать результата; 0 — 120 секунд
 	SemesterHalf domain.SemesterHalf // "second" — без планов, которые идут только в первой половине семестра
 	ImproveAlgo  string              // метод улучшения: "hillclimb" (по умолчанию) | "sa" | "tabu" | "ga" | "lns"
-	// ParallelStarts — сколько раз составить с разным порядком и взять лучшее; 0 и 1 — один раз.
+	// ParallelStarts — сколько раз составить параллельно и взять лучшее; 1 — один раз,
+	// 0 — DefaultParallelStarts.
 	ParallelStarts int
 	Preferences    domain.SolverPreferences // дополнительные правила, по умолчанию выключены
 	// BaseScheduleID — перегенерация: закреплённые пары этого расписания остаются на
 	// местах, остальное строится заново вокруг них. 0 — составить с нуля.
 	BaseScheduleID int64
 }
+
+// DefaultParallelStarts — стартов по умолчанию. Один запуск ILS примерно в каждом шестом
+// случае застревает с лишним днём с одной парой (+12 000); из четырёх параллельных хотя бы
+// один почти всегда без него (ADR-0021).
+const DefaultParallelStarts = 4
 
 // Значения по умолчанию.
 const (
@@ -108,6 +114,9 @@ func (g *Generator) Prepare(ctx context.Context, req Request) (*Job, error) {
 // его под именем name. Сохраняет с context.Background(): расписание попадёт в список,
 // даже если пользователь уже закрыл страницу.
 func (g *Generator) SolveAndSave(job *Job, improve solver.ImproveAlgorithm, starts int, name string) (*domain.Schedule, error) {
+	if starts <= 0 {
+		starts = DefaultParallelStarts
+	}
 	sched, err := solver.Solve(job.data, solver.Options{Construction: job.construct, Improve: improve, Budget: job.budget, Starts: starts, Fixed: job.fixed})
 	if err != nil {
 		return nil, err

@@ -114,10 +114,11 @@ func (r *RefWriteRepository) InsertTeacher(ctx context.Context, t domain.Teacher
 	uslots, _ := json.Marshal(t.UnavailableSlots)
 	pbuilds, _ := json.Marshal(t.PreferredBuildings)
 	ext, _ := json.Marshal(externalPairsOrEmpty(t.ExternalPairs))
+	undesired, _ := json.Marshal(slotsOrEmpty(t.UndesiredSlots))
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO teachers (id, name, department_id, max_weekly_hours, unavailable_slots, preferred_buildings, external_pairs)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds, ext)
+		INSERT INTO teachers (id, name, department_id, max_weekly_hours, unavailable_slots, preferred_buildings, external_pairs, undesired_slots)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds, ext, undesired)
 	return err
 }
 
@@ -125,10 +126,11 @@ func (r *RefWriteRepository) UpdateTeacher(ctx context.Context, t domain.Teacher
 	uslots, _ := json.Marshal(t.UnavailableSlots)
 	pbuilds, _ := json.Marshal(t.PreferredBuildings)
 	ext, _ := json.Marshal(externalPairsOrEmpty(t.ExternalPairs))
+	undesired, _ := json.Marshal(slotsOrEmpty(t.UndesiredSlots))
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE teachers SET name = $2, department_id = $3, max_weekly_hours = $4,
-		    unavailable_slots = $5, preferred_buildings = $6, external_pairs = $7 WHERE id = $1`,
-		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds, ext)
+		    unavailable_slots = $5, preferred_buildings = $6, external_pairs = $7, undesired_slots = $8 WHERE id = $1`,
+		t.ID, t.Name, t.DepartmentID, t.MaxWeeklyHours, uslots, pbuilds, ext, undesired)
 	return tag.RowsAffected() > 0, err
 }
 
@@ -203,4 +205,12 @@ func externalPairsOrEmpty(p []domain.ExternalPair) []domain.ExternalPair {
 		return []domain.ExternalPair{}
 	}
 	return p
+}
+
+// slotsOrEmpty — nil превращается в пустой список: в колонке NOT NULL нельзя хранить null.
+func slotsOrEmpty(slots []domain.TimeSlot) []domain.TimeSlot {
+	if slots == nil {
+		return []domain.TimeSlot{}
+	}
+	return slots
 }

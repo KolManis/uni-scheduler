@@ -105,3 +105,29 @@ func TestExplainScore_Unavoidable(t *testing.T) {
 		}
 	}
 }
+
+// Пара в нежелательное время преподавателя штрафуется в каждой неделе, когда она идёт,
+// и разбор совпадает с оценкой.
+func TestUndesiredSlots(t *testing.T) {
+	slot := domain.MustNewTimeSlot(domain.Monday, 1)
+	input := domain.InputData{Teachers: []domain.Teacher{{ID: "T1", UndesiredSlots: []domain.TimeSlot{slot}}}}
+	assignments := []domain.Assignment{
+		{GroupIDs: []string{"G1"}, TeacherID: "T1", TimeSlot: slot, Parity: domain.Always},
+		{GroupIDs: []string{"G1"}, TeacherID: "T1", TimeSlot: domain.MustNewTimeSlot(domain.Monday, 2), Parity: domain.Always},
+	}
+	b := CalculateFitnessBreakdown(assignments, input)
+	if b.TeacherUndesired != 2*teacherUndesiredPenalty {
+		t.Errorf("TeacherUndesired = %d, want %d", b.TeacherUndesired, 2*teacherUndesiredPenalty)
+	}
+	sum := 0
+	for _, v := range ExplainScore(assignments, input) {
+		sum += v.Penalty
+	}
+	if sum != b.Total() {
+		t.Errorf("сумма нарушений %d, score %d", sum, b.Total())
+	}
+	e := newEvaluator(assignments, input, nil)
+	if e.score() != b.Total() {
+		t.Errorf("evaluator %d, fitness %d", e.score(), b.Total())
+	}
+}

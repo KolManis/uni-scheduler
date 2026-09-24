@@ -59,11 +59,19 @@ func groupViolations(groupID string, weekParity domain.Parity, w *week, building
 		out.add("Saturday", "Одна пара в субботу", domain.Saturday, "ради одной пары группа едет в субботу", loneSaturdayPenalty)
 	}
 	days, total := 0, 0
+	fewest, most := 0, 0
+	var fewestDay, mostDay domain.Day
 	for d, day := range domain.AllDays {
 		all, n := w.dayPairs(d)
 		pairs := all[:n]
 		if n == 0 {
 			continue
+		}
+		if days == 0 || n < fewest {
+			fewest, fewestDay = n, day
+		}
+		if n > most {
+			most, mostDay = n, day
 		}
 		days++
 		total += n
@@ -97,6 +105,8 @@ func groupViolations(groupID string, weekParity domain.Parity, w *week, building
 			}
 		}
 	}
+	out.add("GroupUnevenWeek", "Неравномерная неделя", "", fmt.Sprintf("%s — %d пар, %s — %d",
+		dayName(mostDay), most, dayName(fewestDay), fewest), unevenWeekPenaltyFor(fewest, most))
 	out.add("GroupTooFewDays", "Мало учебных дней", "", fmt.Sprintf("%d пар за %d дн.", total, days), tooFewDaysPenalty(total, days))
 	return out.items
 }
@@ -117,6 +127,12 @@ func teacherViolations(teacherID string, weekParity domain.Parity, w *week) []do
 		if extra := n - teacherMaxPairsPerDay; extra > 0 {
 			out.add("TeacherDayOverload", "Перегрузка преподавателя", day,
 				fmt.Sprintf("%d пар (норма %d)", n, teacherMaxPairsPerDay), extra*teacherOverloadPenalty)
+		}
+		for _, p := range pairs {
+			if w.undesired[d*6+p] {
+				out.add("TeacherUndesired", "Нежелательное время преподавателя", day,
+					fmt.Sprintf("%d-я пара", p+1), teacherUndesiredPenalty)
+			}
 		}
 		if g := gapsIn(pairs); g > 0 {
 			out.add("TeacherGaps", "Окно у преподавателя", day, fmt.Sprintf("пустых пар: %d (%s)", g, pairList(pairs)), g*teacherGapPenalty)
@@ -179,6 +195,10 @@ func buildWeeks(pairs []domain.Assignment, input domain.InputData) (groups, teac
 		}
 		weekFor(teachers, a.TeacherID).add(slot, "")
 	}
+	undesired := undesiredSlots(input)
+	for id, w := range teachers {
+		w.undesired = undesired[id]
+	}
 	return groups, teachers
 }
 
@@ -218,4 +238,10 @@ func dayIndex(d domain.Day) int {
 
 func who(v domain.Violation) string {
 	return v.TeacherID + strings.Join(v.GroupIDs, ",")
+}
+
+// dayName — день по-русски для подписей нарушений.
+func dayName(d domain.Day) string {
+	return map[domain.Day]string{domain.Monday: "пн", domain.Tuesday: "вт", domain.Wednesday: "ср",
+		domain.Thursday: "чт", domain.Friday: "пт", domain.Saturday: "сб"}[d]
 }

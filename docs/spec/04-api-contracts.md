@@ -12,7 +12,7 @@
   "timeout_sec": 120,
   "solver_type": "dsatur",
   "improve_algo": "hillclimb",
-  "parallel_starts": 1,
+  "parallel_starts": 4,
   "semester_half": "",
   "lecture_practice_same_day": false,
   "lecture_before_practice": false,
@@ -24,7 +24,7 @@
 |---|---|---|
 | `timeout_sec` | 120 | секунды; бюджет солвера — на 15 с меньше |
 | `improve_algo` | `hillclimb` | `hillclimb`, `sa`, `tabu`, `ga`, `lns` |
-| `parallel_starts` | 1 | N > 1 — многостарт, берётся лучший |
+| `parallel_starts` | 4 | сколько раз составить параллельно, берётся лучшее; 1 — один запуск |
 | `semester_half` | `""` | `second` исключает планы только первой половины |
 | `solver_type` | `""` | построение: `""` или `dsatur` — самая трудная пара первой, `teacher` — по преподавателям (ADR-0015, ADR-0019); иначе 400 |
 

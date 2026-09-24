@@ -67,6 +67,8 @@
       <tr><td>Суббота</td><td class="{{if .Breakdown.Saturday}}score-bad{{end}}">{{.Breakdown.Saturday}}</td><td>занятия в субботу, особенно единичные у группы</td></tr>
       <tr><td>Перегрузка дня (группы)</td><td class="{{if .Breakdown.GroupDayOverload}}score-bad{{end}}">{{.Breakdown.GroupDayOverload}}</td><td>4+ пар в один день у группы</td></tr>
       <tr><td>Длинный день (группы)</td><td class="{{if .Breakdown.GroupLongDay}}score-bad{{end}}">{{.Breakdown.GroupLongDay}}</td><td>больше 4 пар подряд без окон</td></tr>
+      <tr><td>Нежелательное время (преподаватели)</td><td class="{{if .Breakdown.TeacherUndesired}}score-bad{{end}}">{{.Breakdown.TeacherUndesired}}</td><td>пары в слотах, отмеченных у преподавателя как нежелательные</td></tr>
+      <tr><td>Неравномерная неделя (группы)</td><td class="{{if .Breakdown.GroupUnevenWeek}}score-bad{{end}}">{{.Breakdown.GroupUnevenWeek}}</td><td>дни сильно различаются по числу пар: 5 и 1 вместо 3 и 3</td></tr>
       <tr><td>Мало дней (группы)</td><td class="{{if .Breakdown.GroupTooFewDays}}score-bad{{end}}">{{.Breakdown.GroupTooFewDays}}</td><td>большая нагрузка втиснута в 1-2 дня</td></tr>
       <tr><td>Перегрузка дня (преподаватели)</td><td class="{{if .Breakdown.TeacherDayOverload}}score-bad{{end}}">{{.Breakdown.TeacherDayOverload}}</td><td>больше 4 пар в день у одного преподавателя (3–4 — норма)</td></tr>
       <tr><td>Концентрация (преподаватели)</td><td class="{{if .Breakdown.TeacherConcentration}}score-bad{{end}}">{{.Breakdown.TeacherConcentration}}</td><td>нагрузка не размазана по неделе (&lt;3 дней)</td></tr>

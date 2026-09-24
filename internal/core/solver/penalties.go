@@ -8,15 +8,17 @@ import "github.com/KolManis/uni-scheduler/internal/core/domain"
 //
 // Веса штрафов (подробно — docs/spec/03-algorithm.md, раздел 4).
 const (
-	saturdayPairPenalty    = 200       // каждая пара в субботу
-	loneSaturdayPenalty    = 8000      // у группы в субботу ровно одна пара
-	groupGapPenalty        = 10000     // окно в одну пару у группы
-	longGapPenalty         = 1_000_000 // окно в 2+ пары подряд (HC8): только если построению было некуда деться
-	singleClassDayPenalty  = 12000     // день с одной парой — дороже окна (ADR-0016)
-	transitionNextPenalty  = 2000      // переход в другой корпус на следующую пару
-	transitionGapPenalty   = 700       // переход в другой корпус через одну пару
-	teacherGapPenalty      = 60        // окно у преподавателя
-	teacherOverloadPenalty = 3000      // каждая пара преподавателя сверх нормы в день
+	saturdayPairPenalty     = 200       // каждая пара в субботу
+	loneSaturdayPenalty     = 8000      // у группы в субботу ровно одна пара
+	groupGapPenalty         = 10000     // окно в одну пару у группы
+	longGapPenalty          = 1_000_000 // окно в 2+ пары подряд (HC8): только если построению было некуда деться
+	singleClassDayPenalty   = 12000     // день с одной парой — дороже окна (ADR-0016)
+	transitionNextPenalty   = 2000      // переход в другой корпус на следующую пару
+	transitionGapPenalty    = 700       // переход в другой корпус через одну пару
+	teacherGapPenalty       = 60        // окно у преподавателя
+	teacherOverloadPenalty  = 3000      // каждая пара преподавателя сверх нормы в день
+	teacherUndesiredPenalty = 500       // пара в нежелательное для преподавателя время (ADR-0022)
+	unevenWeekPenalty       = 300       // неравномерная неделя: за каждую пару разницы сверх 1 (ADR-0022)
 
 	// teacherMaxPairsPerDay — сколько пар в день у преподавателя — норма (ADR-0004).
 	teacherMaxPairsPerDay = 4
@@ -27,6 +29,8 @@ type week struct {
 	busy     [numSlots]bool
 	building [numSlots]string // корпус пары группы; "" — спортзал, стадион или неизвестно
 	saturday int              // сколько пар в субботу
+	// undesired — нежелательные слоты преподавателя (у групп пусто).
+	undesired [numSlots]bool
 }
 
 // add отмечает пару в слоте slot (0..35) в корпусе building ("" — не учитывать корпус).
@@ -60,12 +64,17 @@ func groupPenalties(w *week) domain.FitnessBreakdown {
 		b.Saturday += loneSaturdayPenalty
 	}
 	days, total := 0, 0
+	fewest, most := 0, 0 // меньше и больше всего пар в учебный день
 	for day := 0; day < 6; day++ {
 		all, n := w.dayPairs(day)
 		pairs := all[:n]
 		if n == 0 {
 			continue
 		}
+		if days == 0 || n < fewest {
+			fewest = n
+		}
+		most = max(most, n)
 		days++
 		total += len(pairs)
 		b.GroupDayOverload += dayOverloadPenalty(len(pairs))
@@ -78,7 +87,17 @@ func groupPenalties(w *week) domain.FitnessBreakdown {
 		}
 	}
 	b.GroupTooFewDays += tooFewDaysPenalty(total, days)
+	b.GroupUnevenWeek += unevenWeekPenaltyFor(fewest, most)
 	return b
+}
+
+// unevenWeekPenaltyFor — учебные дни группы сильно различаются по числу пар: лучше 3 и 3,
+// чем 5 и 1. Разница в одну пару — норма; каждая пара сверх неё — unevenWeekPenalty.
+func unevenWeekPenaltyFor(fewest, most int) int {
+	if extra := most - fewest - 1; extra > 0 {
+		return extra * unevenWeekPenalty
+	}
+	return 0
 }
 
 // teacherPenalties — штрафы преподавателя за неделю.
@@ -97,6 +116,11 @@ func teacherPenalties(w *week) domain.FitnessBreakdown {
 			b.TeacherDayOverload += extra * teacherOverloadPenalty
 		}
 		b.TeacherGaps += gapsIn(pairs) * teacherGapPenalty
+		for _, p := range pairs {
+			if w.undesired[day*6+p] {
+				b.TeacherUndesired += teacherUndesiredPenalty
+			}
+		}
 	}
 	// Концентрация: 4+ пары в неделю уложены меньше чем в 3 дня.
 	if total >= 4 && days < 3 {
@@ -133,15 +157,17 @@ func longDayPenalty(pairs []int) int {
 	return 300
 }
 
-// tooFewDaysPenalty — 4+ пары в неделю уложены в один день (600) или в два (200).
+// tooFewDaysPenalty — нагрузка втиснута в 1–2 дня: в среднем больше 3 пар на учебный день
+// (один день — 600, два — 200). 4–6 пар в два дня — не нарушение: разнести их на три дня
+// можно только ценой дня с одной парой, а он намного хуже (ADR-0022).
 func tooFewDaysPenalty(total, days int) int {
-	switch {
-	case total >= 4 && days < 2:
-		return 600
-	case total >= 4 && days < 3:
-		return 200
+	if days == 0 || days >= 3 || total <= 3*days {
+		return 0
 	}
-	return 0
+	if days == 1 {
+		return 600
+	}
+	return 200
 }
 
 // transitionsPenalty — переходы группы в другой корпус между соседними парами дня.
@@ -186,4 +212,20 @@ func longGapsIn(pairs []int) int {
 		}
 	}
 	return n
+}
+
+// undesiredSlots — нежелательные слоты каждого преподавателя: id → слот 0..35.
+func undesiredSlots(input domain.InputData) map[string][numSlots]bool {
+	m := map[string][numSlots]bool{}
+	for _, t := range input.Teachers {
+		if len(t.UndesiredSlots) == 0 {
+			continue
+		}
+		var mask [numSlots]bool
+		for _, s := range t.UndesiredSlots {
+			mask[slotIndex(s)] = true
+		}
+		m[t.ID] = mask
+	}
+	return m
 }

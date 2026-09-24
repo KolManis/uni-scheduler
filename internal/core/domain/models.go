@@ -21,11 +21,14 @@ type Group struct {
 }
 
 type Teacher struct {
-	ID                 string     `json:"id"`
-	Name               string     `json:"name"`
-	DepartmentID       string     `json:"department_id"`
-	MaxWeeklyHours     int        `json:"max_weekly_hours"`
-	UnavailableSlots   []TimeSlot `json:"unavailable_slots,omitempty"`
+	ID               string     `json:"id"`
+	Name             string     `json:"name"`
+	DepartmentID     string     `json:"department_id"`
+	MaxWeeklyHours   int        `json:"max_weekly_hours"`
+	UnavailableSlots []TimeSlot `json:"unavailable_slots,omitempty"`
+	// UndesiredSlots — «можно, но не хочется»: пары туда ставятся, если иначе хуже
+	// (мягкое требование, штраф за каждую пару), в отличие от UnavailableSlots.
+	UndesiredSlots     []TimeSlot `json:"undesired_slots,omitempty"`
 	PreferredBuildings []string   `json:"preferred_buildings,omitempty"`
 	// ExternalPairs — пары преподавателя на других факультетах. Их время задано извне
 	// и не меняется; для алгоритма это занятость преподавателя с учётом чётности (HC7).
@@ -116,6 +119,8 @@ type FitnessBreakdown struct {
 	GroupDayOverload      int // перегрузка дня у группы (4+ / 5+ пар)
 	GroupLongDay          int // длинный день (>4 пар подряд)
 	GroupTooFewDays       int // мало дней при большой нагрузке (группы)
+	GroupUnevenWeek       int // учебные дни группы сильно различаются по числу пар
+	TeacherUndesired      int // пары в нежелательное для преподавателя время
 	TeacherDayOverload    int // день >4 пар у преподавателя (3–4 — норма)
 	TeacherConcentration  int // <3 активных дней у преподавателя при загрузке
 	GroupGaps             int // окна у групп (дороже всего — 10000 за окно)
@@ -130,7 +135,7 @@ type FitnessBreakdown struct {
 
 // Total суммирует все категории — должно совпадать с итоговым score.
 func (b FitnessBreakdown) Total() int {
-	return b.Saturday + b.GroupDayOverload + b.GroupLongDay + b.GroupTooFewDays +
+	return b.Saturday + b.GroupDayOverload + b.GroupLongDay + b.GroupTooFewDays + b.GroupUnevenWeek + b.TeacherUndesired +
 		b.TeacherDayOverload + b.TeacherConcentration + b.GroupGaps + b.TeacherGaps +
 		b.BuildingTransitions + b.SingleClassDay + b.GroupLongGaps + b.PracticeBeforeLecture + b.LecturePracticeApart + b.SubjectSpread
 }

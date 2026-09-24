@@ -151,6 +151,7 @@ func teacherFromForm(r *http.Request) domain.Teacher {
 		DepartmentID:       r.FormValue("department_id"),
 		MaxWeeklyHours:     hours,
 		UnavailableSlots:   parseUnavailable(formStrings(r, "unavailable")),
+		UndesiredSlots:     parseUnavailable(formStrings(r, "undesired")),
 		PreferredBuildings: formStrings(r, "preferred_buildings"),
 		ExternalPairs:      parseExternalPairs(r),
 	}

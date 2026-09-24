@@ -24,6 +24,7 @@ type scheduleDraft struct {
 	occupiedRooms    map[domain.TimeSlot]map[string]domain.Parity
 	planKeys         map[string]string // id плана → subjectKey, считается один раз
 	logger           *slog.Logger
+	undesired        map[string][numSlots]bool // нежелательные слоты преподавателей
 }
 
 func newDraft(input domain.InputData) *scheduleDraft {
@@ -64,6 +65,7 @@ func newDraft(input domain.InputData) *scheduleDraft {
 		occupiedTeachers: occupiedTeachers,
 		occupiedRooms:    make(map[domain.TimeSlot]map[string]domain.Parity),
 		planKeys:         pk,
+		undesired:        undesiredSlots(input),
 		logger:           slog.Default(),
 	}
 }

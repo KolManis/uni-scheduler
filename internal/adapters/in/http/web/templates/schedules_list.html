@@ -71,12 +71,12 @@
       <div class="field">
         <label>Параллельных стартов</label>
         <select name="parallel_starts">
-          <option value="1">1 (быстро)</option>
-          <option value="3">3</option>
-          <option value="5">5 (рекомендуется)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="4" selected>4 (рекомендуется)</option>
           <option value="8">8</option>
         </select>
-        <div class="hint">При выборе «Все методы» игнорируется (методы уже идут параллельно).</div>
+        <div class="hint">Столько раз расписание составляется параллельно, берётся лучшее: одиночный запуск иногда застревает с лишним днём с одной парой. По времени почти бесплатно, пока стартов не больше ядер процессора. При выборе «Все методы» игнорируется.</div>
       </div>
     </div>
     <div class="field">
