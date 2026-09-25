@@ -5,4 +5,5 @@
 !cmd/
 !internal/
 !migrations/
+!data/snapshots/
 cmd/bench/

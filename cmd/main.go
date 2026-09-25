@@ -46,6 +46,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// scheduler seed [-force] — загрузить справочники кафедры и выйти, сервер не запускается.
+	if len(os.Args) > 1 && os.Args[1] == "seed" {
+		if err := runSeed(ctx, pool, logger, os.Args[2:]); err != nil {
+			logger.Error("seed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	inputRepo := postgres.NewInputRepository(pool)
 	outputRepo := postgres.NewOutputRepository(pool)
 	importRepo := postgres.NewImportRepository(pool)

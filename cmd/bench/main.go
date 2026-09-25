@@ -7,17 +7,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/KolManis/uni-scheduler/data/snapshots"
 	"github.com/KolManis/uni-scheduler/internal/adapters/out/postgres"
 	"github.com/KolManis/uni-scheduler/internal/core/domain"
 	"github.com/KolManis/uni-scheduler/internal/core/solver"
@@ -94,29 +92,11 @@ func loadFromDB(dsn string) (*domain.InputData, error) {
 	return postgres.NewInputRepository(pool).LoadInput(ctx)
 }
 
-// loadSnapshots читает справочники из JSON-файлов, которые заливает make seed.
+// loadSnapshots читает справочники из каталога JSON-файлов (формат data/snapshots).
 func loadSnapshots(dir string) (*domain.InputData, error) {
-	var in domain.InputData
-	files := []struct {
-		name string
-		dst  any
-	}{
-		{"buildings.json", &in.Buildings},
-		{"departments.json", &in.Departments},
-		{"groups.json", &in.Groups},
-		{"teachers.json", &in.Teachers},
-		{"rooms.json", &in.Rooms},
-		{"subject_plans.json", &in.SubjectPlans},
-	}
-	for _, f := range files {
-		raw, err := os.ReadFile(filepath.Join(dir, f.name))
-		if err != nil {
-			return nil, err
-		}
-		raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
-		if err := json.Unmarshal(raw, f.dst); err != nil {
-			return nil, fmt.Errorf("%s: %w", f.name, err)
-		}
+	in, err := snapshots.Load(os.DirFS(dir))
+	if err != nil {
+		return nil, err
 	}
 	return &in, nil
 }

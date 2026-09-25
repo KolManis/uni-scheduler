@@ -94,8 +94,9 @@ make test        # go build + go vet + go test
 
 Интерфейс: http://localhost:8080/ui/schedules
 
-Установка на сервер без интернета: `make package` → `dist/uni-scheduler.tar.gz` (образы,
-compose, база со справочниками), инструкция — [deploy/README.md](deploy/README.md).
+Установка на сервер — [deploy/README.md](deploy/README.md): без интернета — из пакета
+`make package` → `dist/uni-scheduler.tar.gz` (образы, compose, база со справочниками); с интернетом —
+сборка образа на сервере из репозитория и `scheduler seed` для справочников кафедры.
 
 ## Документация
 

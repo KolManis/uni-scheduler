@@ -51,11 +51,13 @@ Step 'Дамп базы без расписаний'
 # расписаний не входят: сервер начинает с пустого списка.
 docker exec $dbContainer sh -c "pg_dump -U postgres -d scheduler --no-owner --no-privileges --exclude-table-data=schedules > /tmp/seed.sql"
 Check 'pg_dump'
-docker cp "${dbContainer}:/tmp/seed.sql" (Join-Path $out 'seed.sql'); Check 'docker cp'
+New-Item -ItemType Directory -Force (Join-Path $out 'initdb') | Out-Null
+docker cp "${dbContainer}:/tmp/seed.sql" (Join-Path $out 'initdb\seed.sql'); Check 'docker cp'
 
 Step 'Конфигурация'
 # Миграции встроены в бинарник и образ, отдельно их класть не нужно.
 Copy-Item deploy\docker-compose.yml, deploy\.env.example, deploy\README.md $out
+Copy-Item deploy\initdb\README.md (Join-Path $out 'initdb')
 Set-Content -Path (Join-Path $out 'VERSION') -Value $version -Encoding ascii
 
 Step 'Архив dist/uni-scheduler.tar.gz'

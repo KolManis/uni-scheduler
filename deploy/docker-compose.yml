@@ -19,9 +19,11 @@ services:
       retries: 10
     volumes:
       - db_data:/var/lib/postgresql/data
-      # seed.sql выполняется только при первом запуске, на пустом томе: схема, справочники и
-      # отметка о применённых миграциях. Дальше схему обновляет приложение при старте (goose).
-      - ./seed.sql:/docker-entrypoint-initdb.d/900_seed.sql:ro
+      # Файлы *.sql из initdb/ выполняются только при первом запуске, на пустом томе. В пакете
+      # там seed.sql — схема и справочники кафедры. При установке из git папка пустая: схему
+      # создаёт приложение, справочники загружает `scheduler seed`. Дальше схему обновляет
+      # приложение при старте (goose).
+      - ./initdb:/docker-entrypoint-initdb.d:ro
 
   app:
     image: uni-scheduler-app:${APP_VERSION:-latest}
